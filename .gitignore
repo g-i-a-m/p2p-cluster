@@ -1,0 +1,11 @@
+!.vscode
+./coturn/bin
+./coturn/build
+./coturn/include
+
+./coturn-proxy/build
+coturn-proxy/build
+coturn/bin
+coturn/build
+coturn/lib
+coturn/include

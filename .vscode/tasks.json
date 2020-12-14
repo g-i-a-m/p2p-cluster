@@ -1,0 +1,49 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "build turnserver",
+            "command": "reset && cd ${workspaceFolder}/coturn/ && make -j8",
+            "args": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "rebuild turnserver",
+            "command": "reset && cd ${workspaceFolder}/coturn/ && make clean && ./configure && make -j8",
+            "args": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "build turn_proxy",
+            "command": "reset && cd ${workspaceFolder}/coturn-proxy && cd ./build/ && make -j8",
+            "args": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "rebuild turn_proxy",
+            "command": "reset && cd ${workspaceFolder}/coturn-proxy && rm -rf ./build && mkdir build && cd ./build/ && cmake -DCMAKE_BUILD_TYPE=Debug .. && make -j8",
+            "args": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ],
+    "version": "2.0.0"
+}

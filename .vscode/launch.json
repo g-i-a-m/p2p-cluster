@@ -1,0 +1,54 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug turnserver",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/coturn/bin/turnserver",
+            "args": ["-c", "/etc/turnserver.conf"/*, "-o"*/, "-v"], //-o Run server process as daemon
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/coturn/bin/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "build turnserver",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Debug coturnproxy",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/coturn-proxy/build/coturn_proxy",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/coturn-proxy/build/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "build turn_proxy",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ],
+    "compounds": [
+        {
+          "name": "Debug ALL",
+          "configurations": ["Debug turnserver", "Debug coturnproxy"]
+        }
+    ]
+}
