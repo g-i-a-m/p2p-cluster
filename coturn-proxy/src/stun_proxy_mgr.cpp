@@ -51,11 +51,12 @@ void StunProxyMgr::PacketCallbackAsync(unsigned int srcip,unsigned short srcport
 
 void StunProxyMgr::Startup() {
     local_ip = GetHostInfo();
+    i_local_ip = g_coturn_ip;
     printf("Proxy ip address %s\n", local_ip.c_str());
     local_port = 9900;
 
     spAmqpHandler= std::make_shared<amqp_asio>();
-    spAmqpHandler->InitAmqp(this,"admin:admin@192.168.10.109","奔波儿灞","灞波儿奔");
+    spAmqpHandler->InitAmqp(this,"admin:admin@192.168.10.109","奔波儿灞","灞波儿奔_");
     
     spProxyServer=std::make_shared<CStunProxy>(9900, 1500);
     spProxyServer->SetListen(this);
@@ -123,8 +124,8 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
     header.header.identifier = htons(0x8000);
     header.header.srcIp = srcip;
     header.header.srcPort = srcport;
-    header.header.dstIp = 0UL;
-    header.header.dstPort = 0U;
+    header.header.dstIp = htonl(i_local_ip);
+    header.header.dstPort = htons(local_port);
     size_t header_len = header.GetLength();
     uint8_t custom_packet_buffer[1500]={0};
     size_t custom_packet_len(n_len+header_len);
@@ -145,11 +146,15 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
         key.append(std::to_string(srcport));
         auto it = mapProxyInfo.find(key);
         if (it != mapProxyInfo.end()) {
-            //spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
-            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+            if (it->second.proxyip!=i_local_ip) {
+                spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+            }
+            else {
+                spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+            }
         }
         else {
-            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+            std::cout << "not found channel data router ip" << std::endl;
         }
     }
     else if (stun_is_indication_str(p_buffer,n_len)) {
@@ -197,9 +202,17 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             key.append(std::to_string(peer_addr.s4.sin_port));
             auto it = mapProxyInfo.find(key);
             if (it != mapProxyInfo.end()) {
-                //spProxyServer->SendToByAddr(htonl(it->second.proxyip),htons(it->second.proxyport),(const char*)custom_packet_buffer,custom_packet_len);
-                spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+                if (it->second.proxyip!=i_local_ip) {
+                    spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+                }
+                else {
+                    spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+                }
             }
+            else {
+                std::cout << "not found router ip" << method << std::endl;
+            }
+            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;}
         case STUN_METHOD_CHANNEL_BIND: {
             stun_tid tid;
@@ -218,7 +231,15 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             key.append(std::to_string(peer_addr.s4.sin_port));
             auto it = mapProxyInfo.find(key);
             if (it != mapProxyInfo.end()) {
-                spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+                if (it->second.proxyip!=i_local_ip) {
+                    spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+                }
+                else {
+                    spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+                }
+            }
+            else {
+                std::cout << "not found router ip" << method << std::endl;
             }
             break;}
         default:
@@ -265,7 +286,7 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
                 }
             }
             else if (method == STUN_METHOD_SEND) {
-                std::cout << "recv data from coturn/other-proxy, send indication" << std::endl;
+                std::cout << "recv data from coturn, send indication" << std::endl;
             }
             else {
                 std::cout << "unsuport indication packet, method:" << method << std::endl;
@@ -275,7 +296,6 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
             switch (method) {
             case STUN_METHOD_BINDING:
             case STUN_METHOD_REFRESH:{
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
                 break;
             }
             case STUN_METHOD_ALLOCATE:{
@@ -297,8 +317,6 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
                 std::stringstream str_msg;
                 boost::property_tree::write_json(str_msg, root, false);
                 spAmqpHandler->publishMessage(str_msg.str());
-
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
                 break;
             }
             case STUN_METHOD_CREATE_PERMISSION:{
@@ -315,7 +333,6 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
                     mapPeerInfo[s_key] = info;
                     mapRequests.erase(it);
                 }
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
                 break;
             }
             case STUN_METHOD_CHANNEL_BIND:{
@@ -341,23 +358,33 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
                     spAmqpHandler->publishMessage(str_msg.str());
                     mapRequests.erase(it);
                 }
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
                 break;
             }
             default:
                 break;
+            }
+            if (cus_header->GetDstIntIp()!=i_local_ip) {
+                spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)p_payload,n_payload_len);
+            }
+            else {
+                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
             }
         }
         else if (stun_is_error_response_str(p_payload,n_payload_len,nullptr,nullptr,0U)) {
             switch (method) {
             case STUN_METHOD_BINDING:
             case STUN_METHOD_ALLOCATE:
-            case STUN_METHOD_REFRESH: {
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
+            case STUN_METHOD_REFRESH:
                 break;
-            }
             default:
                 break;
+            }
+
+            if (cus_header->GetDstIntIp()!=i_local_ip) {
+                spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)p_payload,n_payload_len);
+            }
+            else {
+                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
             }
         }
         else {
@@ -374,7 +401,7 @@ void StunProxyMgr::HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, 
     uint8_t *p_buffer=(uint8_t *)pPacket->GetData();
     stun_custom_header* cus_header = (stun_custom_header*)p_buffer;
     if (cus_header->IsStunExtensionHeader()) {
-        std::cout << "recv data from other proxy, len:" << n_len << std::endl;
+        std::cout << "recv data from other-proxy, len:" << n_len << std::endl;
         uint8_t* p_payload = p_buffer+cus_header->GetLength();
         size_t n_payload_len = n_len-cus_header->GetLength();
         uint16_t method = stun_get_method_str(p_payload,n_payload_len);

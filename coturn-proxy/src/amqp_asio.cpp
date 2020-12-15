@@ -9,7 +9,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/format.hpp>
 #include <boost/asio/placeholders.hpp>
-
+#include "configure.h"
 uint16_t amqp_asio_connection_handler::onNegotiate(AMQP::TcpConnection *connection, uint16_t interval)
 {
     if (interval<=120 && interval>=30)
@@ -101,36 +101,40 @@ bool amqp_asio::InitCenterAmqp(std::string s_center_server,std::string s_exchang
 
     mp_ampq_channel->declareExchange(s_exchange_fanout.c_str(), AMQP::fanout,AMQP::autodelete)
             .onSuccess([s_exchange_fanout](){
-        std::cout << "amqp declare exchange " << std::endl;
+        std::cout << "amqp declare exchange "<< s_exchange_fanout.c_str() << std::endl;
     })
             .onError([s_exchange_fanout](const char* msg){
         std::cout << s_exchange_fanout.c_str() << " declare failed, desc: " << msg << std::endl;
     });
-    std::string s_broadcast_edge_queue=s_fanout_queue;
-    mp_ampq_channel->declareQueue(s_broadcast_edge_queue.c_str(),AMQP::autodelete)
-            .onSuccess([](const std::string &name, uint32_t messagecount, uint32_t consumercount) {
-        std::cout << "amqp declared queue " << std::endl;
+    std::string s_broadcast_queue(s_fanout_queue);
+    s_broadcast_queue.append(Configure::GetInstance()->GetServerGuid());
+    mp_ampq_channel->declareQueue(s_broadcast_queue.c_str(),AMQP::autodelete)
+            .onSuccess([s_broadcast_queue](const std::string &name, uint32_t messagecount, uint32_t consumercount) {
+        std::cout << "amqp declared queue " << s_broadcast_queue.c_str() << std::endl;
     })
-            .onError([s_broadcast_edge_queue](const char* msg) {
-        std::cout << s_broadcast_edge_queue.c_str() << " declare failed, desc: " << msg << std::endl;
+            .onError([s_broadcast_queue](const char* msg) {
+        std::cout << s_broadcast_queue.c_str() << " declare failed, desc: " << msg << std::endl;
     });
 
-    mp_ampq_channel->bindQueue(s_exchange_fanout.c_str(), s_broadcast_edge_queue.c_str(),s_broadcast_edge_queue.c_str() )
-            .onSuccess([](){
-        std::cout << "amqp binded to queue " << std::endl;
+    mp_ampq_channel->bindQueue(s_exchange_fanout.c_str(), s_broadcast_queue.c_str(),s_fanout_queue.c_str() )
+            .onSuccess([s_broadcast_queue,s_fanout_queue](){
+        std::cout << "amqp binded to queue " << s_broadcast_queue << " with the key:" << s_fanout_queue << std::endl;
     })
             .onError([s_exchange_fanout](const char* msg){
-        std::cout << "amqp bind failed, desc: %s" << msg << std::endl;
+        std::cout << s_exchange_fanout << " bind failed, desc: " << msg << std::endl;
     });
 
     ///consume boradcast message
-    mp_ampq_channel->consume(s_broadcast_edge_queue.c_str(), AMQP::noack).onReceived(
-                [this,s_broadcast_edge_queue](const AMQP::Message &message, uint64_t deliveryTag, bool redelivered) {
+    mp_ampq_channel->consume(s_broadcast_queue.c_str(), AMQP::noack).onReceived(
+                [this,s_broadcast_queue](const AMQP::Message &message, uint64_t deliveryTag, bool redelivered) {
         std::string myString(message.body(), message.body()+message.bodySize());
         this->recvBroadcastMessage(myString);
     })
-            .onError([s_broadcast_edge_queue](const char* msg){
-        std::cout << "%s consume failed, desc: %s" << s_broadcast_edge_queue.c_str() << msg << std::endl;
+            .onSuccess([s_broadcast_queue](){
+        std::cout << "amqp consume queue " << s_broadcast_queue << " successed" << std::endl;
+    })
+            .onError([s_broadcast_queue](const char* msg){
+        std::cout << s_broadcast_queue << " consume failed, desc: " << msg << std::endl;
     });
 
     return true;
@@ -172,7 +176,7 @@ void amqp_asio::ReConnectAmqp(const boost::system::error_code& error)
 
         if (!mb_center_amqp_connected)
         {
-            std::cout << "set next reconnection timer, edge rabbitmq:%s, center rabbitmq:%s" << (mb_center_amqp_connected?"conn":"disconn") << std::endl;
+            std::cout << "set next reconnection timer, rabbitmq: " << (mb_center_amqp_connected?"conn":"disconn") << std::endl;
             StartReConnectTimer();
         }
     }
@@ -185,13 +189,13 @@ void amqp_asio::recvBroadcastMessage(std::string s_message)
 
 void amqp_asio::publishMessage(std::string s_message)
 {
-    std::cout << "send to rabbit:" << s_message.c_str() << std::endl;
     mp_ioservice->post(boost::bind(&amqp_asio::GetPublishMessage, this,s_message));
 }
 
 void amqp_asio::GetPublishMessage(std::string s_message)
 {
-    mp_ampq_channel->publish("",ms_fanout_queue,s_message);
+    std::cout << "send to rabbit: " << s_message.c_str() << std::endl;
+    mp_ampq_channel->publish(ms_broadcast_exchange, ms_fanout_queue,s_message);
 }
 
 void amqp_asio::Run()

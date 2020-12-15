@@ -69,6 +69,7 @@ private:
     std::shared_ptr<shark::ThreadPool> spThreadPool;
     std::shared_ptr<shark::Worker> simulated_worker;
     std::string local_ip;
+    uint32_t i_local_ip;
     uint16_t local_port;
     std::unordered_map<std::string,proxyinfo> mapProxyInfo;
     std::unordered_map<std::string,proxyinfo> mapPeerInfo;
