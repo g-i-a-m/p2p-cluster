@@ -261,7 +261,6 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
         uint8_t* p_payload = p_buffer+cus_header->GetLength();
         size_t n_payload_len = n_len-cus_header->GetLength();
         uint16_t method = stun_get_method_str(p_payload,n_payload_len);
-        uint16_t type = stun_get_msg_type_str(p_payload,n_payload_len);
         if (is_channel_msg_str(p_payload,n_payload_len)) {
             // send to other proxy or client
             std::string key = cus_header->GetDstIp();
@@ -293,99 +292,10 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
             }
         }
         else if (stun_is_success_response_str(p_payload,n_payload_len)) {
-            switch (method) {
-            case STUN_METHOD_BINDING:
-            case STUN_METHOD_REFRESH:{
-                break;
-            }
-            case STUN_METHOD_ALLOCATE:{
-                //allocate success respone to broadcast relay-address
-                ioa_addr relay_addr;
-	            GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_RELAYED_ADDRESS,&relay_addr);
-                ioa_addr mapped_addr;
-	            GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_MAPPED_ADDRESS,&mapped_addr);
-                boost::property_tree::ptree root;
-                root.put(JSON_ACTION, ACT_TYPE_RELAYINFO);
-                root.put(JSON_FID, Configure::GetInstance()->GetServerGuid());
-                root.put(JSON_RELAYIP, stun_custom_header::ip2string(relay_addr.s4.sin_addr.s_addr));
-                root.put(JSON_RELAYPORT, relay_addr.s4.sin_port);
-                root.put(JSON_MAPPEDIP, stun_custom_header::ip2string(mapped_addr.s4.sin_addr.s_addr));
-                root.put(JSON_MAPPEDPORT, mapped_addr.s4.sin_port);
-                root.put(JSON_PROXYIP, local_ip);
-                root.put(JSON_PROXYPORT, local_port);
-                
-                std::stringstream str_msg;
-                boost::property_tree::write_json(str_msg, root, false);
-                spAmqpHandler->publishMessage(str_msg.str());
-                break;
-            }
-            case STUN_METHOD_CREATE_PERMISSION:{
-                stun_tid tid;
-                stun_tid_from_message_str(p_payload,n_payload_len,&tid);
-                std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
-                auto it = mapRequests.find(key);
-                if (it != mapRequests.end()) {
-                    std::string s_key = stun_custom_header::ip2string(it->second.peerip).c_str() + std::to_string(it->second.peerport);
-                    proxyinfo info;
-                    info.channel_num = 0;
-                    info.srcip = it->second.srcip;
-                    info.srcport = it->second.srcport;
-                    mapPeerInfo[s_key] = info;
-                    mapRequests.erase(it);
-                }
-                break;
-            }
-            case STUN_METHOD_CHANNEL_BIND:{
-                //channel-bind success respone to broadcast channel number
-                stun_tid tid;
-                stun_tid_from_message_str(p_payload,n_payload_len,&tid);
-                std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
-                auto it = mapRequests.find(key);
-                if (it != mapRequests.end()) {
-                    //broadcast msg by amqp
-                    boost::property_tree::ptree root;
-                    root.put(JSON_ACTION, ACT_TYPE_CHANNELINFO);
-                    root.put(JSON_FID, Configure::GetInstance()->GetServerGuid());
-                    root.put(JSON_CHANNELNUM, it->second.channel_num);
-                    root.put(JSON_MAPPEDIP, stun_custom_header::ip2string(it->second.srcip));
-                    root.put(JSON_MAPPEDPORT, it->second.srcport);
-                    root.put(JSON_PEERIP, stun_custom_header::ip2string(it->second.peerip));
-                    root.put(JSON_PEERPORT, it->second.peerport);
-                    root.put(JSON_PROXYIP, local_ip);
-                    root.put(JSON_PROXYPORT, local_port);
-                    std::stringstream str_msg;
-                    boost::property_tree::write_json(str_msg, root, false);
-                    spAmqpHandler->publishMessage(str_msg.str());
-                    mapRequests.erase(it);
-                }
-                break;
-            }
-            default:
-                break;
-            }
-            if (cus_header->GetDstIntIp()!=i_local_ip) {
-                spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)p_payload,n_payload_len);
-            }
-            else {
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
-            }
+            HandleSuccessResponse(method,p_buffer,n_len);
         }
         else if (stun_is_error_response_str(p_payload,n_payload_len,nullptr,nullptr,0U)) {
-            switch (method) {
-            case STUN_METHOD_BINDING:
-            case STUN_METHOD_ALLOCATE:
-            case STUN_METHOD_REFRESH:
-                break;
-            default:
-                break;
-            }
-
-            if (cus_header->GetDstIntIp()!=i_local_ip) {
-                spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)p_payload,n_payload_len);
-            }
-            else {
-                spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
-            }
+            HandleErrorResponse(method,p_buffer,n_len);
         }
         else {
             
@@ -405,16 +315,8 @@ void StunProxyMgr::HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, 
         uint8_t* p_payload = p_buffer+cus_header->GetLength();
         size_t n_payload_len = n_len-cus_header->GetLength();
         uint16_t method = stun_get_method_str(p_payload,n_payload_len);
-        uint16_t type = stun_get_msg_type_str(p_payload,n_payload_len);
         if (is_channel_msg_str(p_payload,n_payload_len)) {
             // send to coturn or client
-
-
-
-
-
-
-
 
         }
         else if (stun_is_indication_str(p_payload,n_payload_len)) {
@@ -457,6 +359,126 @@ void StunProxyMgr::HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, 
     }
     else {
         std::cout << "recv illegal data from proxy, len:" << n_len << std::endl;
+    }
+}
+
+void StunProxyMgr::HandleBindRequest() {
+
+}
+
+void StunProxyMgr::HandleAllocateRequest() {
+
+}
+
+void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_t len) {
+    stun_custom_header* cus_header = (stun_custom_header*)buffer;
+    uint8_t* p_payload = buffer+cus_header->GetLength();
+    size_t n_payload_len = len-cus_header->GetLength();
+    switch (method) {
+    case STUN_METHOD_BINDING:
+    case STUN_METHOD_REFRESH:{
+        break;
+    }
+    case STUN_METHOD_ALLOCATE:{
+        //allocate success respone to broadcast relay-address
+        ioa_addr relay_addr;
+	    GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_RELAYED_ADDRESS,&relay_addr);
+        ioa_addr mapped_addr;
+	    GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_MAPPED_ADDRESS,&mapped_addr);
+        boost::property_tree::ptree root;
+        root.put(JSON_ACTION, ACT_TYPE_RELAYINFO);
+        root.put(JSON_FID, Configure::GetInstance()->GetServerGuid());
+        root.put(JSON_RELAYIP, stun_custom_header::ip2string(relay_addr.s4.sin_addr.s_addr));
+        root.put(JSON_RELAYPORT, relay_addr.s4.sin_port);
+        root.put(JSON_MAPPEDIP, stun_custom_header::ip2string(mapped_addr.s4.sin_addr.s_addr));
+        root.put(JSON_MAPPEDPORT, mapped_addr.s4.sin_port);
+        root.put(JSON_PROXYIP, local_ip);
+        root.put(JSON_PROXYPORT, local_port);
+        
+        std::stringstream str_msg;
+        boost::property_tree::write_json(str_msg, root, false);
+        spAmqpHandler->publishMessage(str_msg.str());
+        break;
+    }
+    case STUN_METHOD_CREATE_PERMISSION:{
+        stun_tid tid;
+        stun_tid_from_message_str(p_payload,n_payload_len,&tid);
+        std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
+        auto it = mapRequests.find(key);
+        if (it != mapRequests.end()) {
+            std::string s_key = stun_custom_header::ip2string(it->second.peerip).c_str() + std::to_string(it->second.peerport);
+            proxyinfo info;
+            info.channel_num = 0;
+            info.srcip = it->second.srcip;
+            info.srcport = it->second.srcport;
+            mapPeerInfo[s_key] = info;
+            mapRequests.erase(it);
+        }
+        break;
+    }
+    case STUN_METHOD_CHANNEL_BIND:{
+        //channel-bind success respone to broadcast channel number
+        stun_tid tid;
+        stun_tid_from_message_str(p_payload,n_payload_len,&tid);
+        std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
+        auto it = mapRequests.find(key);
+        if (it != mapRequests.end()) {
+            //broadcast msg by amqp
+            boost::property_tree::ptree root;
+            root.put(JSON_ACTION, ACT_TYPE_CHANNELINFO);
+            root.put(JSON_FID, Configure::GetInstance()->GetServerGuid());
+            root.put(JSON_CHANNELNUM, it->second.channel_num);
+            root.put(JSON_MAPPEDIP, stun_custom_header::ip2string(it->second.srcip));
+            root.put(JSON_MAPPEDPORT, it->second.srcport);
+            root.put(JSON_PEERIP, stun_custom_header::ip2string(it->second.peerip));
+            root.put(JSON_PEERPORT, it->second.peerport);
+            root.put(JSON_PROXYIP, local_ip);
+            root.put(JSON_PROXYPORT, local_port);
+            std::stringstream str_msg;
+            boost::property_tree::write_json(str_msg, root, false);
+            spAmqpHandler->publishMessage(str_msg.str());
+            mapRequests.erase(it);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    if (cus_header->GetDstIntIp()!=i_local_ip) {
+        spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)buffer,len);
+    }
+    else {
+        spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
+    }
+}
+
+void StunProxyMgr::HandleErrorResponse(uint16_t method, uint8_t *buffer, size_t len) {
+    stun_custom_header* cus_header = (stun_custom_header*)buffer;
+    uint8_t* p_payload = buffer+cus_header->GetLength();
+    size_t n_payload_len = len-cus_header->GetLength();
+    switch (method) {
+    case STUN_METHOD_BINDING:
+    case STUN_METHOD_ALLOCATE: {
+        stun_tid tid;
+        stun_tid_from_message_str(p_payload,n_payload_len,&tid);
+        std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
+        auto it = mapRequests.find(key);
+        if (it != mapRequests.end()) {
+            mapRequests.erase(it);
+        }
+        break;
+    }
+    case STUN_METHOD_REFRESH:
+        break;
+    default:
+        break;
+    }
+
+    if (cus_header->GetDstIntIp()!=i_local_ip) {
+        spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)buffer,len);
+    }
+    else {
+        spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
     }
 }
 

@@ -62,6 +62,9 @@ private:
     void HandleBindRequest();
     void HandleAllocateRequest();
 
+    void HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_t len);
+    void HandleErrorResponse(uint16_t method, uint8_t *buffer, size_t len);
+
     void asyncTask(std::function<void(std::shared_ptr<StunProxyMgr>)> f);
     bool GetStunAttrAddress(uint8_t* data, size_t len, int attr_type, ioa_addr* addr);
     std::shared_ptr<CStunProxy> spProxyServer;
