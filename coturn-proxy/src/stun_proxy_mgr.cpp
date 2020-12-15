@@ -316,8 +316,8 @@ void StunProxyMgr::HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, 
         size_t n_payload_len = n_len-cus_header->GetLength();
         uint16_t method = stun_get_method_str(p_payload,n_payload_len);
         if (is_channel_msg_str(p_payload,n_payload_len)) {
-            // send to coturn or client
-
+            // send to coturn
+            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)p_buffer,n_len);
         }
         else if (stun_is_indication_str(p_payload,n_payload_len)) {
             if (method == STUN_METHOD_DATA) {
