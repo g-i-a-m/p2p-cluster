@@ -212,7 +212,6 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             else {
                 std::cout << "not found router ip" << method << std::endl;
             }
-            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;}
         case STUN_METHOD_CHANNEL_BIND: {
             stun_tid tid;
@@ -347,11 +346,11 @@ void StunProxyMgr::HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, 
         }
         else if (stun_is_success_response_str(p_payload,n_payload_len)) {
             // the response from proxy, so it must be send to client
-            spProxyServer->SendToByAddr(cus_header->GetSrcIntIp(),cus_header->GetSrcPort(),(const char*)p_payload,n_payload_len);
+            spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
         }
         else if (stun_is_error_response_str(p_payload,n_payload_len,nullptr,nullptr,0U)) {
             // the response from proxy, so it must be send to client
-            spProxyServer->SendToByAddr(cus_header->GetSrcIntIp(),cus_header->GetSrcPort(),(const char*)p_payload,n_payload_len);
+            spProxyServer->SendToByAddr(htonl(cus_header->GetSrcIntIp()),htons(cus_header->GetSrcPort()),(const char*)p_payload,n_payload_len);
         }
         else {
             std::cout << "" << std::endl;
