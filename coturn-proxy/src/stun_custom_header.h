@@ -15,12 +15,14 @@
 #include "stun_proxy.h"
 
 using namespace std;
-//const static uint16_t stun_custom_header_identifier(htonl(0x8000));
+
 #define STUN_CUSTOM_IDENTIFIER htons(0x8000)
 #define STUN_CUSTOM_DATA_IDENTIFIER htons(0x8001)
 #define DEFAULT_VALUE 0U
 #define STUN_COSTOM_HEADER_LEN  14U
+
 #pragma pack(8)
+
 union stun_custom_header {
     stun_custom_header() : header(STUN_CUSTOM_IDENTIFIER, DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE) {}
     void SetIdentifier(uint16_t identifier){ header.identifier=htons(identifier);}
@@ -30,17 +32,13 @@ union stun_custom_header {
     void SetDstAddr(const std::string& ip, uint16_t port) { header.dstIp = htonl(ip2uint32(ip.c_str())); header.dstIp = htons(port); }
     void SetSrcAddr(uint32_t ip, uint16_t port) { header.srcIp = htonl(ip); header.srcIp = htons(port); }
     void SetDstAddr(uint32_t ip, uint16_t port) { header.dstIp = htonl(ip); header.dstIp = htons(port); }
+
     static uint32_t ip2uint32(const char* ip) {
-        std::string strIP(ip);
-        std::vector<std::string> vecSegTag;
-        boost::split(vecSegTag,strIP,boost::is_any_of("."));
-        uint32_t iIP(0);
-        if (vecSegTag.size()==4) {
-            iIP = atoi(vecSegTag[0].c_str()) | atoi(vecSegTag[1].c_str())<<8 | \
-                atoi(vecSegTag[2].c_str())<<16 | atoi(vecSegTag[3].c_str())<<24;
-        }
-        return iIP;
+        struct in_addr s;
+        inet_pton(AF_INET, ip, (void *)&s);
+        return s.s_addr;
     }
+
     static std::string ip2string(uint32_t ip) {
         string szip("");
         in_addr inaddr;
@@ -48,18 +46,21 @@ union stun_custom_header {
         szip = inet_ntoa(inaddr);
         return szip;
     }
+
     bool IsStunExtensionHeader() {
         if (header.identifier==STUN_CUSTOM_IDENTIFIER)
             return true;
         else
             return false;
     }
+
     bool IsStunExtensionRelayHeader() {
         if (header.identifier==STUN_CUSTOM_DATA_IDENTIFIER)
             return true;
         else
             return false;
     }
+
     std::string GetSrcIp() {
         string szip("");
         if (header.srcIp!=0) {
@@ -69,12 +70,15 @@ union stun_custom_header {
         }
         return szip;
     }
+
     uint32_t GetSrcIntIp() {
         return ntohl(header.srcIp);
     }
+
     uint16_t GetSrcPort() {
         return ntohs(header.srcPort);
     }
+
     std::string GetDstIp() {
         string szip("");
         if (header.dstIp!=0) {
@@ -84,12 +88,15 @@ union stun_custom_header {
         }
         return szip;
     }
+
     uint32_t GetDstIntIp() {
         return ntohl(header.dstIp);
     }
+
     uint16_t GetDstPort() {
         return ntohs(header.dstPort);
     }
+
     uint8_t* GetData(){ return buffer_; }
     size_t GetLength() { return sizeof(buffer_); }
 
@@ -103,6 +110,7 @@ union stun_custom_header {
         uint32_t dstIp : 32;
         uint64_t dstPort : 16;
     } header;
+
     uint8_t buffer_[14];
 };
 
@@ -111,6 +119,7 @@ public:
     static stun_custom_packet* CreateCustomPacket() {
         return nullptr;
     }
+    
 protected:
 
 private:
