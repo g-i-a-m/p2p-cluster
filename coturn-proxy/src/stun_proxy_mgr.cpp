@@ -45,7 +45,15 @@ void StunProxyMgr::PacketCallbackAsync(unsigned int srcip,unsigned short srcport
         HandlePacketFromCoturn(srcip, srcport, pPacket, n_len);
     }
     else {
-        HandlePacketFromClient(srcip, srcport, pPacket, n_len);
+        uint8_t *p_buffer=(uint8_t *)pPacket->GetData();
+        stun_custom_header* cus_header = (stun_custom_header*)p_buffer;
+        if (cus_header->IsStunExtensionRelayHeader()) {
+            //indication/channel data from coturn
+            HandlePacketFromCoturn(srcip, srcport, pPacket, n_len);
+        }
+        else {
+            HandlePacketFromClient(srcip, srcport, pPacket, n_len);
+        }
     }
 }
 
@@ -198,20 +206,21 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             info.peerport = peer_addr.s4.sin_port;
             mapRequests[key] = info;
 
-            key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
-            key.append(std::to_string(peer_addr.s4.sin_port));
-            auto it = mapProxyInfo.find(key);
-            if (it != mapProxyInfo.end()) {
-                if (it->second.proxyip!=i_local_ip) {
-                    spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
-                }
-                else {
-                    spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
-                }
-            }
-            else {
-                std::cout << "not found router ip" << method << std::endl;
-            }
+            // key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
+            // key.append(std::to_string(peer_addr.s4.sin_port));
+            // auto it = mapProxyInfo.find(key);
+            // if (it != mapProxyInfo.end()) {
+            //     if (it->second.proxyip!=i_local_ip) {
+            //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+            //     }
+            //     else {
+            //         spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+            //     }
+            // }
+            // else {
+            //     std::cout << "not found router ip" << method << std::endl;
+            // }
+            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;}
         case STUN_METHOD_CHANNEL_BIND: {
             stun_tid tid;
@@ -226,20 +235,21 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             info.peerport = peer_addr.s4.sin_port;
             mapRequests[key] = info;
 
-            key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
-            key.append(std::to_string(peer_addr.s4.sin_port));
-            auto it = mapProxyInfo.find(key);
-            if (it != mapProxyInfo.end()) {
-                if (it->second.proxyip!=i_local_ip) {
-                    spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
-                }
-                else {
-                    spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
-                }
-            }
-            else {
-                std::cout << "not found router ip" << method << std::endl;
-            }
+            // key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
+            // key.append(std::to_string(peer_addr.s4.sin_port));
+            // auto it = mapProxyInfo.find(key);
+            // if (it != mapProxyInfo.end()) {
+            //     if (it->second.proxyip!=i_local_ip) {
+            //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
+            //     }
+            //     else {
+            //         spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
+            //     }
+            // }
+            // else {
+            //     std::cout << "not found router ip" << method << std::endl;
+            // }
+            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;}
         default:
             std::cout << "unsuport request packet, method:" << method << std::endl;
@@ -298,6 +308,29 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
         }
         else {
             
+        }
+    }
+    else if (cus_header->IsStunExtensionRelayHeader()) {
+        uint8_t* p_payload = p_buffer+cus_header->GetLength();
+        size_t n_payload_len = n_len-cus_header->GetLength();
+        uint16_t method = stun_get_method_str(p_payload,n_payload_len);
+        if (is_channel_msg_str(p_payload,n_payload_len)) {
+            //spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_payload+STUN_CHANNEL_HEADER_LENGTH,n_payload_len-STUN_CHANNEL_HEADER_LENGTH);
+            spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
+        }
+        else if (stun_is_indication_str(p_payload,n_payload_len)) {
+            if (method == STUN_METHOD_SEND) {
+                // uint8_t* buffer = GetStunAttrBufferData(p_payload,n_payload_len,STUN_ATTRIBUTE_DATA);
+                // size_t len = GetStunAttrBufferSize(buffer-4);
+                // spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)buffer,len);
+                spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
+            }
+            else if (method == STUN_METHOD_DATA) {
+                std::cout << "recv data from coturn, data indication" << std::endl;
+            }
+            else {
+                std::cout << "unsuport indication packet, method:" << method << std::endl;
+            }
         }
     }
     else {
@@ -509,3 +542,21 @@ bool StunProxyMgr::GetStunAttrAddress(uint8_t* data, size_t len, int attr_type,i
 	return bRet;
 }
 
+uint8_t* StunProxyMgr::GetStunAttrBufferData(uint8_t* data, size_t len, int attr_type) {
+    uint8_t* value = nullptr;
+    stun_attr_ref sar = stun_attr_get_first_str(data, len);
+    while (sar) {//TODO MAX TIMES and ipv4 or ipv6 should be carefull
+        if (stun_attr_get_type(sar)==attr_type) {
+			value = const_cast<uint8_t*>(stun_attr_get_value(sar));
+            break;
+        }
+        else{
+            sar = stun_attr_get_next_str(data, len, sar);
+            continue;
+        }
+    }
+	return value;
+}
+size_t StunProxyMgr::GetStunAttrBufferSize(uint8_t* data) {
+    return ntohs(((uint16_t*)data)[1]);
+}

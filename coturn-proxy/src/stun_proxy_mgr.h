@@ -67,6 +67,8 @@ private:
 
     void asyncTask(std::function<void(std::shared_ptr<StunProxyMgr>)> f);
     bool GetStunAttrAddress(uint8_t* data, size_t len, int attr_type, ioa_addr* addr);
+    uint8_t* GetStunAttrBufferData(uint8_t* data, size_t len, int attr_type);
+    size_t GetStunAttrBufferSize(uint8_t* data);
     std::shared_ptr<CStunProxy> spProxyServer;
     std::shared_ptr<amqp_asio> spAmqpHandler;
     std::shared_ptr<shark::ThreadPool> spThreadPool;

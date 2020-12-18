@@ -53,6 +53,12 @@ union stun_custom_header {
         else
             return false;
     }
+    bool IsStunExtensionRelayHeader() {
+        if (ntohs(header.identifier)==0x8001)
+            return true;
+        else
+            return false;
+    }
     std::string GetSrcIp() {
         string szip("");
         if (header.srcIp!=0) {
