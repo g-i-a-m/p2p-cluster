@@ -4,9 +4,10 @@
 #include <arpa/inet.h>
 
 //const static uint16_t stun_custom_header_identifier(htonl(0x8000));
-#define STUN_CUSTOM_IDENTIFIER htonl(0x8000)
+#define STUN_CUSTOM_IDENTIFIER htons(0x8000)
+#define STUN_CUSTOM_DATA_IDENTIFIER htons(0x8001)
 #define DEFAULT_VALUE 0U
-#define STUN_COSTOM_HEADER_LEN  14U
+#define STUN_CUSTOM_HEADER_LEN  14U
 #pragma pack(8)
 union stun_custom_header {
 //private:

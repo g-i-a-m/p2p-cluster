@@ -129,7 +129,7 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
     uint8_t *p_buffer=(uint8_t *)pPacket->GetData();
 
     stun_custom_header header;
-    header.header.identifier = htons(0x8000);
+    header.header.identifier = STUN_CUSTOM_IDENTIFIER;
     header.header.srcIp = srcip;
     header.header.srcPort = srcport;
     header.header.dstIp = htonl(i_local_ip);
