@@ -21,12 +21,8 @@ class Configure
 		~Configure();
 	public:
 		bool Init();
-		inline std::string GetMqttUserName(){ return ms_mqtt_user_name; };
-		inline std::string GetMqttUserPasswd(){ return ms_mqtt_user_passwd; };
-		inline std::string GetMqtt_ip(){return ms_mqtt_ip; };
 		inline std::string GetPublic_ip(){return ms_public_ip;};
 		inline std::string GetServerGuid(){return ms_uuid;};
-		inline std::string GetMqtt_topic(){return ms_mqtt_topic;};
 		inline std::string GetUdpGatewayPort(){return ms_udp_gateway_port;};
 		inline void  SetLocalUdpIp(unsigned int ip){ mn_local_udp_ip=ip;};
 		unsigned int GetLocalUdpIp(){ return mn_local_udp_ip;};
@@ -37,11 +33,7 @@ class Configure
 		inline std::string GetRabbitmq_port() {return ms_rabbitmq_port;};
 	private:
 		static Configure *mp_conf;
-		std::string ms_mqtt_user_name;
-		std::string ms_mqtt_user_passwd;
 		std::string ms_public_ip;
-		std::string ms_mqtt_topic;
-		std::string ms_mqtt_ip;
 		std::string ms_uuid;
 		std::string ms_udp_gateway_port;
 

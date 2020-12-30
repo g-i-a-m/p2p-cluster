@@ -53,8 +53,7 @@ bool Configure::Init() {
             std::cout<<"can't get slb ip\n";
         }
 
-        std::string s_conf="/usr/local";
-        s_conf+="/conf/coturn-proxy.properties";
+        std::string s_conf("/etc/coturn-proxy.conf");
 
         std::ifstream t(s_conf);
         std::stringstream buffer;
@@ -64,12 +63,6 @@ bool Configure::Init() {
 
         std::string s_rid=ptree.get<std::string>("version");
         ms_udp_gateway_port=ptree.get<std::string>("udp_gateway_port");
-        ms_mqtt_ip=ptree.get<std::string>("mqtt_ip");
-        ms_mqtt_topic=ptree.get<std::string>("mqtt_topic");
-
-        ms_mqtt_user_name=ptree.get<std::string>("mqtt_user_name");
-        ms_mqtt_user_passwd=ptree.get<std::string>("mqtt_user_passwd");
-
         ms_rabbitmq_url=ptree.get<std::string>("rabbitmq_url");
         ms_rabbitmq_port=ptree.get<std::string>("rabbitmq_port");
     }
