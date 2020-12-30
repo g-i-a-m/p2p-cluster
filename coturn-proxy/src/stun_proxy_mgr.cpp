@@ -15,7 +15,7 @@
 #include "json_parse.h"
 #include "comm_types.h"
 
-const uint16_t g_coturn_port = Configure::GetInstance()->GetProxyPort();
+const uint16_t g_coturn_port = Configure::GetInstance()->GetCoturnPort();
 const uint32_t g_coturn_ip = stun_custom_header::ip2uint32(GetHostInfo().c_str());
 
 StunProxyMgr::StunProxyMgr() {
