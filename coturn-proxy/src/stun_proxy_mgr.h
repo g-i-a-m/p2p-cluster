@@ -15,7 +15,7 @@
 #include "systhread/Scheduler.h"
 #include "systhread/Worker.h"
 #include "systhread/ThreadPool.h"
-#include "turn/ns_turn_ioaddr.h"
+#include "turn/client/ns_turn_ioaddr.h"
 
 using namespace std;
 
