@@ -23,7 +23,8 @@ class Configure
 		bool Init();
 		inline std::string GetPublic_ip(){return ms_public_ip;};
 		inline std::string GetServerGuid(){return ms_uuid;};
-		inline std::string GetUdpGatewayPort(){return ms_udp_gateway_port;};
+		unsigned int GetCoturnPort(){ return mn_coturn_port;};
+		unsigned int GetProxyPort(){ return mn_proxy_port;};
 		inline void  SetLocalUdpIp(unsigned int ip){ mn_local_udp_ip=ip;};
 		unsigned int GetLocalUdpIp(){ return mn_local_udp_ip;};
 		inline void SetLocalUdpPort(unsigned short port){ mn_local_udp_port=port;};
@@ -35,8 +36,8 @@ class Configure
 		static Configure *mp_conf;
 		std::string ms_public_ip;
 		std::string ms_uuid;
-		std::string ms_udp_gateway_port;
-
+		uint16_t mn_coturn_port;
+		uint16_t mn_proxy_port;
 		unsigned int mn_local_udp_ip;
 		unsigned short mn_local_udp_port;
 

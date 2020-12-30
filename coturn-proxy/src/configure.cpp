@@ -50,7 +50,7 @@ bool Configure::Init() {
             ms_public_ip=pIp;
         }
         else {
-            std::cout<<"can't get slb ip\n";
+            std::cout<<"can't get slb ip" << std::endl;
         }
 
         std::string s_conf("/etc/coturn-proxy.conf");
@@ -62,11 +62,14 @@ bool Configure::Init() {
         boost::property_tree::read_json(buffer, ptree);
 
         std::string s_rid=ptree.get<std::string>("version");
-        ms_udp_gateway_port=ptree.get<std::string>("udp_gateway_port");
+        mn_coturn_port = ptree.get<uint16_t>("coturn_port");
+        mn_proxy_port = ptree.get<uint16_t>("proxy_port");
         ms_rabbitmq_url=ptree.get<std::string>("rabbitmq_url");
         ms_rabbitmq_port=ptree.get<std::string>("rabbitmq_port");
     }
-    catch(...) {}
+    catch(...) {
+        std::cout<<"parse configure file get \n" << std::endl;
+    }
 
     if(ms_uuid.empty()) {
         boost::uuids::uuid a_uuid = boost::uuids::random_generator()();
