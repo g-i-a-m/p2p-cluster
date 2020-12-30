@@ -15,7 +15,7 @@
 #include "json_parse.h"
 #include "comm_types.h"
 
-const uint32_t g_coturn_port = 3478U;
+const uint16_t g_coturn_port = Configure::GetInstance()->GetProxyPort();
 const uint32_t g_coturn_ip = stun_custom_header::ip2uint32(GetHostInfo().c_str());
 
 StunProxyMgr::StunProxyMgr() {
@@ -38,7 +38,7 @@ void StunProxyMgr::PacketCallback(unsigned int srcip,unsigned short srcport,std:
 void StunProxyMgr::PacketCallbackAsync(unsigned int srcip,unsigned short srcport, \
                                         std::shared_ptr<PacketBuffer> pPacket, size_t n_len) {
     std::string s_ip=std::to_string(srcip)+std::to_string(srcport);
-    if (srcport==9900) {
+    if (srcport==local_proxy_port) {
         HandlePacketFromOtherProxy(srcip, srcport, pPacket, n_len);
     }
     else if (srcport == g_coturn_port) {
@@ -58,15 +58,15 @@ void StunProxyMgr::PacketCallbackAsync(unsigned int srcip,unsigned short srcport
 }
 
 void StunProxyMgr::Startup() {
-    local_ip = GetHostInfo();
-    i_local_ip = g_coturn_ip;
-    printf("Proxy ip address %s\n", local_ip.c_str());
-    local_port = 9900;
+    str_local_ip = GetHostInfo();
+    local_proxy_ip = g_coturn_ip;
+    printf("Proxy ip address %s\n", str_local_ip.c_str());
+    local_proxy_port = Configure::GetInstance() ->GetProxyPort();
 
     spAmqpHandler= std::make_shared<amqp_asio>();
     spAmqpHandler->InitAmqp(this,"admin:admin@192.168.10.109","奔波儿灞","灞波儿奔_");
     
-    spProxyServer=std::make_shared<CStunProxy>(9900, 1500);
+    spProxyServer=std::make_shared<CStunProxy>(local_proxy_port, 1500);
     spProxyServer->SetListen(this);
     spProxyServer->Start();
 }
@@ -132,8 +132,8 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
     header.header.identifier = STUN_CUSTOM_IDENTIFIER;
     header.header.srcIp = srcip;
     header.header.srcPort = srcport;
-    header.header.dstIp = htonl(i_local_ip);
-    header.header.dstPort = htons(local_port);
+    header.header.dstIp = htonl(local_proxy_ip);
+    header.header.dstPort = htons(local_proxy_port);
     size_t header_len = header.GetLength();
     uint8_t custom_packet_buffer[1500]={0};
     size_t custom_packet_len(n_len+header_len);
@@ -154,7 +154,7 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
         key.append(std::to_string(srcport));
         auto it = mapProxyInfo.find(key);
         if (it != mapProxyInfo.end()) {
-            if (it->second.proxyip!=i_local_ip) {
+            if (it->second.proxyip!=local_proxy_ip) {
                 spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
             }
             else {
@@ -210,7 +210,7 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             // key.append(std::to_string(peer_addr.s4.sin_port));
             // auto it = mapProxyInfo.find(key);
             // if (it != mapProxyInfo.end()) {
-            //     if (it->second.proxyip!=i_local_ip) {
+            //     if (it->second.proxyip!=local_proxy_ip) {
             //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
             //     }
             //     else {
@@ -239,7 +239,7 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             // key.append(std::to_string(peer_addr.s4.sin_port));
             // auto it = mapProxyInfo.find(key);
             // if (it != mapProxyInfo.end()) {
-            //     if (it->second.proxyip!=i_local_ip) {
+            //     if (it->second.proxyip!=local_proxy_ip) {
             //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
             //     }
             //     else {
@@ -424,8 +424,8 @@ void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_
         root.put(JSON_RELAYPORT, relay_addr.s4.sin_port);
         root.put(JSON_MAPPEDIP, stun_custom_header::ip2string(mapped_addr.s4.sin_addr.s_addr));
         root.put(JSON_MAPPEDPORT, mapped_addr.s4.sin_port);
-        root.put(JSON_PROXYIP, local_ip);
-        root.put(JSON_PROXYPORT, local_port);
+        root.put(JSON_PROXYIP, str_local_ip);
+        root.put(JSON_PROXYPORT, local_proxy_port);
         
         std::stringstream str_msg;
         boost::property_tree::write_json(str_msg, root, false);
@@ -464,8 +464,8 @@ void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_
             root.put(JSON_MAPPEDPORT, it->second.srcport);
             root.put(JSON_PEERIP, stun_custom_header::ip2string(it->second.peerip));
             root.put(JSON_PEERPORT, it->second.peerport);
-            root.put(JSON_PROXYIP, local_ip);
-            root.put(JSON_PROXYPORT, local_port);
+            root.put(JSON_PROXYIP, str_local_ip);
+            root.put(JSON_PROXYPORT, local_proxy_port);
             std::stringstream str_msg;
             boost::property_tree::write_json(str_msg, root, false);
             spAmqpHandler->publishMessage(str_msg.str());
@@ -476,7 +476,7 @@ void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_
     default:
         break;
     }
-    if (cus_header->GetDstIntIp()!=i_local_ip) {
+    if (cus_header->GetDstIntIp()!=local_proxy_ip) {
         spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)buffer,len);
     }
     else {
@@ -506,7 +506,7 @@ void StunProxyMgr::HandleErrorResponse(uint16_t method, uint8_t *buffer, size_t 
         break;
     }
 
-    if (cus_header->GetDstIntIp()!=i_local_ip) {
+    if (cus_header->GetDstIntIp()!=local_proxy_ip) {
         spProxyServer->SendToByAddr(cus_header->GetDstIntIp(),cus_header->GetDstPort(),(const char*)buffer,len);
     }
     else {

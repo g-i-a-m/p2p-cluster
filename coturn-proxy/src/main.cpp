@@ -11,7 +11,4 @@
 int main() {
     std::shared_ptr<StunProxyMgr> mgr = std::make_shared<StunProxyMgr>();
     mgr->Startup();
-    // std::shared_ptr<CStunProxy> proxy = std::make_shared<CStunProxy>(9900, 1500);
-    // proxy->SetListen(mgr.get());
-    // proxy->Start();
 }
