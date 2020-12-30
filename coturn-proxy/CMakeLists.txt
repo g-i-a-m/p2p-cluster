@@ -16,6 +16,7 @@ INCLUDE_DIRECTORIES("/usr/include/glib-2.0/")
 INCLUDE_DIRECTORIES("/usr/lib/x86_64-linux-gnu/glib-2.0/include/")
 INCLUDE_DIRECTORIES("./third/AMQP-CPP/include")
 INCLUDE_DIRECTORIES("./third/coturn/include")
+INCLUDE_DIRECTORIES("./third/coturn/include/turn")
 INCLUDE_DIRECTORIES("./")
 
 LINK_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}/third/build/lib")
