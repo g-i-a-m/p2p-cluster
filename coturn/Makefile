@@ -4,10 +4,10 @@
 ECHO_CMD = echo
 CC = cc
 LDFLAGS +=  -L/usr/local/lib/ -L/usr/local/lib/ -lrt -lnsl -lresolv -pthread -lcrypto -lssl -levent_core -levent_extra -levent_openssl -levent_pthreads  -Wl,-rpath,/usr/local/lib/ -Wl,-rpath,/usr/local/lib/ -Wl,-rpath,/usr/local/lib
-DBLIBS += 
+DBLIBS +=  -lhiredis
 CFLAGS += -g  -Wall -Wno-deprecated-declarations -Wextra -Wformat-security -Wnested-externs -Wstrict-prototypes  -Wmissing-prototypes -Wpointer-arith -Wcast-qual -I/usr/local/include -I/usr/local/include/ -I/usr/local/include  -DTURN_HAS_DAEMON  -DTURN_SCTP_INCLUDE="</usr/include/netinet/sctp.h>"     -DINSTALL_PREFIX=/usr/local -DTURNDB=/usr/local/var/db/turndb
 CPPFLAGS = 
-DBCFLAGS +=  -DTURN_NO_PQ -DTURN_NO_MYSQL -DTURN_NO_SQLITE -DTURN_NO_MONGO -DTURN_NO_HIREDIS
+DBCFLAGS +=   -I/usr/include/hiredis -DTURN_NO_PQ -DTURN_NO_MYSQL -DTURN_NO_SQLITE -DTURN_NO_MONGO 
 #
 PORTNAME = turnserver
 PREFIX = /usr/local
