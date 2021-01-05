@@ -52,7 +52,7 @@ void Worker::start(std::shared_ptr<std::promise<void>> start_promise) {
     return size_t(0);
   };
   boost::thread *t=new boost::thread(worker);
-  pthread_setname_np((t->native_handle()),"media_work");
+  pthread_setname_np((t->native_handle()),"proxy_worker");
   group_.add_thread(t);
 }
 
