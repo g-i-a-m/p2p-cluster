@@ -35,7 +35,7 @@
 #include "ns_ioalib_impl.h"
 
 #include "ns_turn_openssl.h"
-
+#include "stun_custom_header.h"
 #include <pthread.h>
 
 /* #define REQUEST_CLIENT_CERT */
@@ -651,7 +651,7 @@ static void udp_server_input_handler(evutil_socket_t fd, short what, void* arg)
 	int flags = MSG_DONTWAIT;
 
 	bsize = udp_recvfrom(fd, &(server->sm.m.sm.nd.src_addr), &(server->addr),
-			(char*)ioa_network_buffer_data(elem), (int)ioa_network_buffer_get_capacity_udp(),
+			(char*)ioa_network_buffer_data_origin(elem), (int)ioa_network_buffer_get_capacity_udp(),
 			&(server->sm.m.sm.nd.recv_ttl), &(server->sm.m.sm.nd.recv_tos),
 			server->e->cmsg, flags, NULL);
 
@@ -682,7 +682,7 @@ static void udp_server_input_handler(evutil_socket_t fd, short what, void* arg)
 					&errcode);
 		//try again...
 		do {
-			bsize = recvfrom(fd, ioa_network_buffer_data(elem), ioa_network_buffer_get_capacity_udp(), flags, (struct sockaddr*) &(server->sm.m.sm.nd.src_addr), (socklen_t*) &slen);
+			bsize = recvfrom(fd, ioa_network_buffer_data_origin(elem), ioa_network_buffer_get_capacity_udp(), flags, (struct sockaddr*) &(server->sm.m.sm.nd.src_addr), (socklen_t*) &slen);
 		} while (bsize < 0 && (errno == EINTR));
 
 		conn_reset = is_connreset();
@@ -725,6 +725,9 @@ static void udp_server_input_handler(evutil_socket_t fd, short what, void* arg)
 
 		} else {
 			server->sm.m.sm.s = s;
+			union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(elem);
+			server->sm.m.sm.nd.src_addr.s4.sin_port = ntohs(header->header.srcPort);
+			server->sm.m.sm.nd.src_addr.s4.sin_addr.s_addr = header->header.srcIp;
 			rc = handle_udp_packet(server, &(server->sm), server->e, server->ts);
 		}
 

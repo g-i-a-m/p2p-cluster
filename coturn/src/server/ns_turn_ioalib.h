@@ -175,6 +175,8 @@ ioa_network_buffer_handle ioa_network_buffer_allocate(ioa_engine_handle e);
 void ioa_network_buffer_header_init(ioa_network_buffer_handle nbh);
 uint8_t *ioa_network_buffer_data(ioa_network_buffer_handle nbh);
 size_t ioa_network_buffer_get_size(ioa_network_buffer_handle nbh);
+uint8_t *ioa_network_buffer_data_origin(ioa_network_buffer_handle nbh);
+size_t ioa_network_buffer_get_size_origin(ioa_network_buffer_handle nbh);
 size_t ioa_network_buffer_get_capacity(ioa_network_buffer_handle nbh);
 size_t ioa_network_buffer_get_capacity_udp(void);
 void ioa_network_buffer_set_size(ioa_network_buffer_handle nbh, size_t len);

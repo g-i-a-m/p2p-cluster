@@ -35,7 +35,7 @@
 #include "ns_turn_msg_addr.h"
 #include "ns_turn_ioalib.h"
 #include "../apps/relay/ns_ioalib_impl.h"
-
+#include "stun_custom_header.h"
 ///////////////////////////////////////////
 
 #define FUNCSTART if(server && eve(server->verbose)) TURN_LOG_FUNC(TURN_LOG_LEVEL_INFO,"%s:%d:start\n",__FUNCTION__,__LINE__)
@@ -967,10 +967,10 @@ static int handle_turn_allocate(turn_turnserver *server,
 
 	if (is_allocation_valid(alloc)) {
 
-		if (!stun_tid_equals(tid, &(alloc->tid))) {
+		/* if (!stun_tid_equals(tid, &(alloc->tid))) {
 			*err_code = 437;
 			*reason = (const uint8_t *)"Wrong TID";
-		} else {
+		} else  */{
 			size_t len = ioa_network_buffer_get_size(nbh);
 			ioa_addr xor_relayed_addr1, *pxor_relayed_addr1=NULL;
 			ioa_addr xor_relayed_addr2, *pxor_relayed_addr2=NULL;
@@ -1743,7 +1743,8 @@ static int handle_turn_refresh(turn_turnserver *server,
 
 										//Use new buffer and redefine ss:
 										nbh = ioa_network_buffer_allocate(server->e);
-
+										memcpy(ioa_network_buffer_data_origin(nbh),ioa_network_buffer_data_origin(in_buffer->nbh),STUN_CUSTOM_HEADER_LEN);
+										ioa_network_buffer_set_size(nbh, STUN_CUSTOM_HEADER_LEN);
 										dec_quota(ss);
 										ss = orig_ss;
 										inc_quota(ss,ss->username);
@@ -2863,7 +2864,7 @@ static int handle_turn_binding(turn_turnserver *server,
 
 	} else if(ss->client_socket && get_remote_addr_from_ioa_socket(ss->client_socket)) {
 
-		size_t len = ioa_network_buffer_get_size(nbh);
+		size_t len = ioa_network_buffer_get_size_origin(nbh);
 		if (stun_set_binding_response_str(ioa_network_buffer_data(nbh), &len, tid,
 					get_remote_addr_from_ioa_socket(ss->client_socket), 0, NULL, cookie, old_stun) >= 0) {
 
@@ -3027,21 +3028,48 @@ static int handle_turn_send(turn_turnserver *server, ts_ur_super_session *ss,
 				set_df_on_ioa_socket(get_relay_socket_ss(ss,peer_addr.ss.sa_family), set_df);
 
 				ioa_network_buffer_handle nbh = in_buffer->nbh;
-				if(value && len>0) {
-					uint16_t offset = (uint16_t)(value - ioa_network_buffer_data(nbh));
-					ioa_network_buffer_add_offset_size(nbh,offset,0,len);
-				} else {
-					len = 0;
-					ioa_network_buffer_set_size(nbh,len);
+				if (peer_addr.s4.sin_addr.s_addr==ss->client_socket->local_addr.s4.sin_addr.s_addr) {
+					if(value && len>0) {
+						uint16_t offset = (uint16_t)(value - ioa_network_buffer_data_origin(nbh));
+						ioa_network_buffer_add_offset_size(nbh,offset,0,len-STUN_CUSTOM_HEADER_LEN);
+					} else {
+						len = 0;
+						ioa_network_buffer_set_size(nbh,len);
+					}
+					ioa_network_buffer_header_init(nbh);
+					int skip = 0;
+					send_data_from_ioa_socket_nbh(get_relay_socket_ss(ss,peer_addr.ss.sa_family), &peer_addr, nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
+					if (!skip) {
+						++(ss->peer_sent_packets);
+						ss->peer_sent_bytes += len;
+						turn_report_session_usage(ss, 0);
+					}
 				}
-				ioa_network_buffer_header_init(nbh);
-				int skip = 0;
-				send_data_from_ioa_socket_nbh(get_relay_socket_ss(ss,peer_addr.ss.sa_family), &peer_addr, nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
-				if (!skip) {
-					++(ss->peer_sent_packets);
-					ss->peer_sent_bytes += len;
-					turn_report_session_usage(ss, 0);
+				else {
+					union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(nbh);
+					ioa_socket_handle s = get_relay_socket_ss(ss,peer_addr.ss.sa_family);
+					ioa_addr dst_addr;
+					dst_addr.s4.sin_family 		= AF_INET;
+					dst_addr.s4.sin_port 		= header->header.dstPort;
+					dst_addr.s4.sin_addr.s_addr	= peer_addr.s4.sin_addr.s_addr;
+
+					header->header.identifier 	= STUN_CUSTOM_DATA_IDENTIFIER;
+					// header->header.srcIp 		= in_buffer->src_addr.s4.sin_addr.s_addr;
+					// header->header.srcPort 		= in_buffer->src_addr.s4.sin_port;
+					header->header.srcIp 		= s->local_addr.s4.sin_addr.s_addr;
+					header->header.srcPort 		= s->local_addr.s4.sin_port;
+					header->header.dstIp 		= peer_addr.s4.sin_addr.s_addr;
+					header->header.dstPort 		= peer_addr.s4.sin_port;
+
+					int skip = 0;
+					send_data_from_ioa_socket_nbh(s, &dst_addr, nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
+					if (!skip) {
+						++(ss->peer_sent_packets);
+						ss->peer_sent_bytes += len;
+						turn_report_session_usage(ss, 0);
+					}
 				}
+				
 				in_buffer->nbh = NULL;
 			}
 
@@ -3176,7 +3204,8 @@ static int handle_turn_create_permission(turn_turnserver *server,
 									       ioa_network_buffer_get_size(in_buffer->nbh),
 									       sar, &peer_addr,
 									       NULL);
-
+					char* p = inet_ntoa(peer_addr.s4.sin_addr);
+					printf("add permission %s:%u\n", p, ntohs(peer_addr.s4.sin_port));
 					addr_set_port(&peer_addr, 0);
 					if (update_permission(ss, &peer_addr) < 0) {
 						*err_code = 500;
@@ -3283,7 +3312,9 @@ static void resume_processing_after_username_check(int success,  int oauth, int 
 					inc_quota(ss,ss->username);
 				}
 			}
-
+			union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(in_buffer->nbh);
+			ss->client_socket->remote_addr.s4.sin_port = ntohs(header->header.srcPort);
+			ss->client_socket->remote_addr.s4.sin_addr.s_addr = header->header.srcIp;
 			read_client_connection(server,ss,in_buffer,0,0);
 
 			close_ioa_socket_after_processing_if_necessary(ss->client_socket);
@@ -3473,17 +3504,17 @@ static int check_stun_auth(turn_turnserver *server,
 
 		/* Stale Nonce check: */
 
-		if(new_nonce) {
-			*err_code = 438;
-			*reason = (const uint8_t*)"Wrong nonce";
-			return create_challenge_response(ss,tid,resp_constructed,err_code,reason,nbh,method);
-		}
+		// if(new_nonce) {
+		// 	*err_code = 438;
+		// 	*reason = (const uint8_t*)"Wrong nonce";
+		// 	return create_challenge_response(ss,tid,resp_constructed,err_code,reason,nbh,method);
+		// }
 
-		if(strcmp((char*)ss->nonce,(char*)nonce)) {
-			*err_code = 438;
-			*reason = (const uint8_t*)"Stale nonce";
-			return create_challenge_response(ss,tid,resp_constructed,err_code,reason,nbh,method);
-		}
+		// if(strcmp((char*)ss->nonce,(char*)nonce)) {
+		// 	*err_code = 438;
+		// 	*reason = (const uint8_t*)"Stale nonce";
+		// 	return create_challenge_response(ss,tid,resp_constructed,err_code,reason,nbh,method);
+		// }
 	}
 
 	/* Password */
@@ -3614,12 +3645,12 @@ static int handle_turn_command(turn_turnserver *server, ts_ur_super_session *ss,
 			if(method == STUN_METHOD_ALLOCATE) {
 
 				allocation *a = get_allocation_ss(ss);
-				if(is_allocation_valid(a)) {
+				/* if(is_allocation_valid(a)) {
 					if(!stun_tid_equals(&(a->tid), &tid)) {
 						err_code = 437;
 						reason = (const uint8_t *)"Mismatched allocation: wrong transaction ID";
 					}
-				}
+				} */
 
 				if(!err_code) {
 					SOCKET_TYPE cst = get_ioa_socket_type(ss->client_socket);
@@ -3845,7 +3876,7 @@ static int handle_turn_command(turn_turnserver *server, ts_ur_super_session *ss,
 					{
 						const uint8_t *field = (const uint8_t *) get_version(server);
 						size_t fsz = strlen(get_version(server));
-						size_t len = ioa_network_buffer_get_size(nbh);
+						size_t len = ioa_network_buffer_get_size_origin(nbh);
 						stun_attr_add_str(ioa_network_buffer_data(nbh), &len, STUN_ATTRIBUTE_SOFTWARE, field, fsz);
 						ioa_network_buffer_set_size(nbh, len);
 					}
@@ -3946,13 +3977,13 @@ static int handle_turn_command(turn_turnserver *server, ts_ur_super_session *ss,
 		{
 			const uint8_t *field = (const uint8_t *) get_version(server);
 			size_t fsz = strlen(get_version(server));
-			size_t len = ioa_network_buffer_get_size(nbh);
+			size_t len = ioa_network_buffer_get_size_origin(nbh);
 			stun_attr_add_str(ioa_network_buffer_data(nbh), &len, STUN_ATTRIBUTE_SOFTWARE, field, fsz);
 			ioa_network_buffer_set_size(nbh, len);
 		}
 
 		if(message_integrity) {
-			size_t len = ioa_network_buffer_get_size(nbh);
+			size_t len = ioa_network_buffer_get_size_origin(nbh);
 			stun_attr_add_integrity_str(server->ct,ioa_network_buffer_data(nbh),&len,ss->hmackey,ss->pwd,SHATYPE_DEFAULT);
 			ioa_network_buffer_set_size(nbh,len);
 		}
@@ -4126,17 +4157,45 @@ static int write_to_peerchannel(ts_ur_super_session* ss, uint16_t chnum, ioa_net
 
 			ioa_network_buffer_handle nbh = in_buffer->nbh;
 
-			ioa_network_buffer_add_offset_size(in_buffer->nbh, STUN_CHANNEL_HEADER_LENGTH, 0, ioa_network_buffer_get_size(in_buffer->nbh)-STUN_CHANNEL_HEADER_LENGTH);
+			if (chn->peer_addr.s4.sin_addr.s_addr==ss->client_socket->local_addr.s4.sin_addr.s_addr) {
+				ioa_network_buffer_add_offset_size(in_buffer->nbh, STUN_CHANNEL_HEADER_LENGTH+STUN_CUSTOM_HEADER_LEN, 0, ioa_network_buffer_get_size(in_buffer->nbh)-STUN_CHANNEL_HEADER_LENGTH);
 
-			ioa_network_buffer_header_init(nbh);
+				ioa_network_buffer_header_init(nbh);
 
-			int skip = 0;
-			rc = send_data_from_ioa_socket_nbh(get_relay_socket_ss(ss, chn->peer_addr.ss.sa_family), &(chn->peer_addr), nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
+				int skip = 0;
+				rc = send_data_from_ioa_socket_nbh(get_relay_socket_ss(ss, chn->peer_addr.ss.sa_family), &(chn->peer_addr), nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
 
-			if (!skip) {
-				++(ss->peer_sent_packets);
-				ss->peer_sent_bytes += (uint32_t)ioa_network_buffer_get_size(in_buffer->nbh);
-				turn_report_session_usage(ss, 0);
+				if (!skip) {
+					++(ss->peer_sent_packets);
+					ss->peer_sent_bytes += (uint32_t)ioa_network_buffer_get_size(in_buffer->nbh);
+					turn_report_session_usage(ss, 0);
+				}
+			}
+			else {
+				union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(nbh);
+				ioa_socket_handle s = get_relay_socket_ss(ss,chn->peer_addr.ss.sa_family);
+
+				ioa_addr dst_addr;
+				dst_addr.s4.sin_family 		= AF_INET;
+				dst_addr.s4.sin_port 		= header->header.dstPort;
+				dst_addr.s4.sin_addr.s_addr	= chn->peer_addr.s4.sin_addr.s_addr;
+
+				header->header.identifier 	= STUN_CUSTOM_DATA_IDENTIFIER;
+				// header->header.srcIp 		= in_buffer->src_addr.s4.sin_addr.s_addr;
+				// header->header.srcPort 		= in_buffer->src_addr.s4.sin_port;
+				header->header.srcIp 		= s->local_addr.s4.sin_addr.s_addr;
+				header->header.srcPort 		= s->local_addr.s4.sin_port;
+				header->header.dstIp 		= chn->peer_addr.s4.sin_addr.s_addr;
+				header->header.dstPort 		= chn->peer_addr.s4.sin_port;
+
+				int skip = 0;
+				rc = send_data_from_ioa_socket_nbh(s, &dst_addr, nbh, in_buffer->recv_ttl-1, in_buffer->recv_tos, &skip);
+
+				if (!skip) {
+					++(ss->peer_sent_packets);
+					ss->peer_sent_bytes += (uint32_t)ioa_network_buffer_get_size(in_buffer->nbh);
+					turn_report_session_usage(ss, 0);
+				}
 			}
 
 			in_buffer->nbh = NULL;
@@ -4567,6 +4626,8 @@ static int read_client_connection(turn_turnserver *server,
 	} else if (stun_is_command_message_full_check_str(ioa_network_buffer_data(in_buffer->nbh), ioa_network_buffer_get_size(in_buffer->nbh), 0, &(ss->enforce_fingerprints))) {
 
 		ioa_network_buffer_handle nbh = ioa_network_buffer_allocate(server->e);
+		memcpy(ioa_network_buffer_data_origin(nbh),ioa_network_buffer_data_origin(in_buffer->nbh),STUN_CUSTOM_HEADER_LEN);
+		ioa_network_buffer_set_size(nbh, STUN_CUSTOM_HEADER_LEN);
 		int resp_constructed = 0;
 
 		uint16_t method = stun_get_method_str(ioa_network_buffer_data(in_buffer->nbh),
@@ -4586,7 +4647,7 @@ static int read_client_connection(turn_turnserver *server,
 		if (resp_constructed) {
 
 			if ((server->fingerprint) || ss->enforce_fingerprints) {
-				size_t len = ioa_network_buffer_get_size(nbh);
+				size_t len = ioa_network_buffer_get_size_origin(nbh);
 				if (stun_attr_add_fingerprint_str(ioa_network_buffer_data(nbh), &len) < 0) {
 					FUNCEND	;
 					ioa_network_buffer_delete(server->e, nbh);
@@ -4607,6 +4668,8 @@ static int read_client_connection(turn_turnserver *server,
 	} else if (old_stun_is_command_message_str(ioa_network_buffer_data(in_buffer->nbh), ioa_network_buffer_get_size(in_buffer->nbh), &old_stun_cookie) && !(*(server->no_stun))) {
 
 		ioa_network_buffer_handle nbh = ioa_network_buffer_allocate(server->e);
+		memcpy(ioa_network_buffer_data_origin(nbh),ioa_network_buffer_data_origin(in_buffer->nbh),STUN_CUSTOM_HEADER_LEN);
+		ioa_network_buffer_set_size(nbh, STUN_CUSTOM_HEADER_LEN);
 		int resp_constructed = 0;
 
 		handle_old_stun_command(server, ss, in_buffer, nbh, &resp_constructed, old_stun_cookie);
@@ -4765,7 +4828,8 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 
 	int offset = STUN_CHANNEL_HEADER_LENGTH;
 
-	int ilen = min((int)ioa_network_buffer_get_size(in_buffer->nbh),
+	// TODO have no custom header
+	int ilen = min((int)ioa_network_buffer_get_size_origin(in_buffer->nbh),
 			(int)(ioa_network_buffer_get_capacity_udp() - offset));
 
 	if (ilen >= 0) {
@@ -4780,6 +4844,50 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 
 			ioa_network_buffer_handle nbh = NULL;
 
+			union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(in_buffer->nbh);
+			if (header->header.identifier==STUN_CUSTOM_DATA_IDENTIFIER) {
+
+				// adjust src addr from custom header 
+				in_buffer->src_addr.s4.sin_addr.s_addr 	= header->header.srcIp;
+				in_buffer->src_addr.s4.sin_port 		= header->header.srcPort;
+				
+				// adjust data packet
+				uint8_t* payload 	= ioa_network_buffer_data(in_buffer->nbh);
+				size_t payload_len 	= ioa_network_buffer_get_size(in_buffer->nbh);
+				if (is_channel_msg_str(payload,payload_len)) {
+					memcpy(ioa_network_buffer_data_origin(in_buffer->nbh), payload+STUN_CHANNEL_HEADER_LENGTH,\
+						payload_len-STUN_CHANNEL_HEADER_LENGTH);
+					ioa_network_buffer_add_offset_size(in_buffer->nbh, 0, 0, payload_len-STUN_CHANNEL_HEADER_LENGTH);
+					// ioa_network_buffer_set_size(in_buffer->nbh, payload_len-STUN_CHANNEL_HEADER_LENGTH);
+					chnum = ((uint16_t*)payload)[0];
+					ilen = payload_len-STUN_CHANNEL_HEADER_LENGTH;
+				}
+				else if (stun_is_indication_str(payload,payload_len)) {
+					uint16_t method = stun_get_method_str(payload,payload_len);
+					if (method == STUN_METHOD_SEND) {
+						const uint8_t* value = NULL;
+						stun_attr_ref sar = stun_attr_get_first_str(payload, payload_len);
+						while (sar) {//TODO MAX TIMES and ipv4 or ipv6 should be carefull
+							if (stun_attr_get_type(sar) == STUN_ATTRIBUTE_DATA) {
+								value = stun_attr_get_value(sar);
+								break;
+							}
+							else{
+								sar = stun_attr_get_next_str(payload, payload_len, sar);
+								continue;
+							}
+						}
+						if (value!=NULL) {
+							size_t len = ntohs(((const uint16_t*)(value-4))[1]);
+							memcpy(ioa_network_buffer_data_origin(in_buffer->nbh),value,len);
+							ioa_network_buffer_add_offset_size(in_buffer->nbh, 0, 0, len);
+							ilen = len;
+							//ioa_network_buffer_set_size(in_buffer->nbh, len);
+						}
+					}
+				}
+			}
+
 			turn_permission_info* tinfo = allocation_get_permission(a,
 							&(in_buffer->src_addr));
 			if (tinfo) {
@@ -4793,11 +4901,13 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 				size_t len = (size_t)(ilen);
 
 				nbh = in_buffer->nbh;
-
+				memcpy(ioa_network_buffer_data(nbh),ioa_network_buffer_data_origin(nbh),\
+					ioa_network_buffer_get_size_origin(nbh)+STUN_CHANNEL_HEADER_LENGTH);
+				ioa_network_buffer_set_size(nbh,len+STUN_CUSTOM_HEADER_LEN);
 				ioa_network_buffer_add_offset_size(nbh,
 								0,
 								STUN_CHANNEL_HEADER_LENGTH,
-								ioa_network_buffer_get_size(nbh)+STUN_CHANNEL_HEADER_LENGTH);
+								ioa_network_buffer_get_size_origin(nbh)+STUN_CHANNEL_HEADER_LENGTH);
 
 				ioa_network_buffer_header_init(nbh);
 
@@ -4812,6 +4922,12 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 							"%s: send channel 0x%x\n", __FUNCTION__,
 							(int) (chnum));
 				}
+				union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(nbh);
+				header->header.identifier=STUN_CUSTOM_IDENTIFIER;
+				header->header.srcIp = 0;
+				header->header.srcPort = 0;
+				header->header.dstIp = htonl(in_buffer->src_addr.s4.sin_addr.s_addr);
+				header->header.dstPort = htons(in_buffer->src_addr.s4.sin_port);
 			} else {
 
 				size_t len = 0;
@@ -4819,7 +4935,7 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 				nbh = ioa_network_buffer_allocate(server->e);
 				stun_init_indication_str(STUN_METHOD_DATA, ioa_network_buffer_data(nbh), &len);
 				stun_attr_add_str(ioa_network_buffer_data(nbh), &len, STUN_ATTRIBUTE_DATA,
-								ioa_network_buffer_data(in_buffer->nbh), (size_t)ilen);
+								ioa_network_buffer_data_origin(in_buffer->nbh), (size_t)ilen);
 				stun_attr_add_addr_str(ioa_network_buffer_data(nbh), &len,
 						STUN_ATTRIBUTE_XOR_PEER_ADDRESS,
 						&(in_buffer->src_addr));
@@ -4828,16 +4944,22 @@ static void peer_input_handler(ioa_socket_handle s, int event_type,
 				{
 					const uint8_t *field = (const uint8_t *) get_version(server);
 					size_t fsz = strlen(get_version(server));
-					size_t len = ioa_network_buffer_get_size(nbh);
+					size_t len = ioa_network_buffer_get_size_origin(nbh);
 					stun_attr_add_str(ioa_network_buffer_data(nbh), &len, STUN_ATTRIBUTE_SOFTWARE, field, fsz);
 					ioa_network_buffer_set_size(nbh, len);
 				}
 
 				if ((server->fingerprint) || ss->enforce_fingerprints) {
-					size_t len = ioa_network_buffer_get_size(nbh);
+					size_t len = ioa_network_buffer_get_size_origin(nbh);
 					stun_attr_add_fingerprint_str(ioa_network_buffer_data(nbh), &len);
 					ioa_network_buffer_set_size(nbh, len);
 				}
+				union stun_custom_header* header = (union stun_custom_header*)ioa_network_buffer_data_origin(nbh);
+				header->header.identifier=STUN_CUSTOM_IDENTIFIER;
+				header->header.srcIp = 0;
+				header->header.srcPort = 0;
+				header->header.dstIp = htonl(in_buffer->src_addr.s4.sin_addr.s_addr);
+				header->header.dstPort = htons(in_buffer->src_addr.s4.sin_port);
 			}
 			if (eve(server->verbose)) {
 				uint16_t* t = (uint16_t*) ioa_network_buffer_data(nbh);

@@ -30,6 +30,8 @@
 
 #include "mainrelay.h"
 #include "dbdrivers/dbdriver.h"
+#include <ifaddrs.h>
+#include <netinet/in.h>
 
 #if (defined LIBRESSL_VERSION_NUMBER && OPENSSL_VERSION_NUMBER == 0x20000000L)
 #undef OPENSSL_VERSION_NUMBER
@@ -1324,8 +1326,29 @@ static void set_option(int c, char *value)
 	case NO_STUN_OPT:
 		turn_params.no_stun = get_bool_value(value);
 		break;
-	case 'L':
+	case 'L': {
+		struct ifaddrs * ifAddrStruct=NULL;
+		struct ifaddrs * ifa=NULL;
+		getifaddrs(&ifAddrStruct);
+		for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+			if (!ifa->ifa_addr) {
+				continue;
+			}
+			if (ifa->ifa_addr->sa_family == AF_INET) {
+				void * tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+				char addressBuffer[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+				if (strcmp(addressBuffer,"127.0.0.1")!=0) {
+					memset(value, 0, INET_ADDRSTRLEN);
+					memcpy(value, addressBuffer, INET_ADDRSTRLEN);
+					break;
+				}
+			}
+		}
+		if (ifAddrStruct!=NULL)
+			freeifaddrs(ifAddrStruct);
 		add_listener_addr(value);
+		}
 		break;
 	case 'E':
 		add_relay_addr(value);
@@ -1354,6 +1377,29 @@ static void set_option(int c, char *value)
 					TURN_LOG_FUNC(TURN_LOG_LEVEL_ERROR, "You cannot define external IP more than once in the configuration\n");
 				} else {
 					turn_params.external_ip = (ioa_addr*)allocate_super_memory_engine(turn_params.listener.ioa_eng, sizeof(ioa_addr));
+
+					// get local address replace the value
+					struct ifaddrs * ifAddrStruct=NULL;
+					struct ifaddrs * ifa=NULL;
+					getifaddrs(&ifAddrStruct);
+					for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+						if (!ifa->ifa_addr) {
+							continue;
+						}
+						if (ifa->ifa_addr->sa_family == AF_INET) {
+							void * tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+							char addressBuffer[INET_ADDRSTRLEN];
+							inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+							if (strcmp(addressBuffer,"127.0.0.1")!=0) {
+								memset(value, 0, INET_ADDRSTRLEN);
+								memcpy(value, addressBuffer, INET_ADDRSTRLEN);
+								break;
+							}
+						}
+					}
+					if (ifAddrStruct!=NULL)
+						freeifaddrs(ifAddrStruct);
+			
 					if(make_ioa_addr((const uint8_t*)value,0,turn_params.external_ip)<0) {
 						TURN_LOG_FUNC(TURN_LOG_LEVEL_ERROR,"-X : Wrong address format: %s\n",value);
 						free(turn_params.external_ip);

@@ -37,6 +37,7 @@
 #include "apputils.h"
 
 #include "ns_ioalib_impl.h"
+#include "stun_custom_header.h"
 
 #if TLS_SUPPORTED
 #include <event2/bufferevent_ssl.h>
@@ -3218,11 +3219,14 @@ int send_data_from_ioa_socket_nbh(ioa_socket_handle s, ioa_addr* dest_addr,
 							dest_addr = NULL; /* ignore dest_addr */
 						} else if (!dest_addr) {
 							dest_addr = &(s->remote_addr);
+							dest_addr->s4.sin_family = AF_INET;
+							dest_addr->s4.sin_port = 44070;
+							dest_addr->s4.sin_addr.s_addr = s->local_addr.s4.sin_addr.s_addr;
 						}
 
 						ret = udp_send(s,
 									dest_addr,
-									(char*) ioa_network_buffer_data(nbh),ioa_network_buffer_get_size(nbh));
+									(char*) ioa_network_buffer_data_origin(nbh),ioa_network_buffer_get_size_origin(nbh)+STUN_CUSTOM_HEADER_LEN);
 						if (ret < 0) {
 							s->tobeclosed = 1;
 #if defined(EADDRNOTAVAIL)
@@ -3493,11 +3497,25 @@ void ioa_network_buffer_header_init(ioa_network_buffer_handle nbh)
 uint8_t *ioa_network_buffer_data(ioa_network_buffer_handle nbh)
 {
 	stun_buffer_list_elem *buf_elem = (stun_buffer_list_elem *)nbh;
-	return buf_elem->buf.buf + buf_elem->buf.offset - buf_elem->buf.coffset;
+	return buf_elem->buf.buf + buf_elem->buf.offset - buf_elem->buf.coffset + STUN_CUSTOM_HEADER_LEN;
 }
 
 size_t ioa_network_buffer_get_size(ioa_network_buffer_handle nbh)
 {
+	if(!nbh)
+		return 0;
+	else {
+		stun_buffer_list_elem *buf_elem = (stun_buffer_list_elem *)nbh;
+		return (size_t)(buf_elem->buf.len-STUN_CUSTOM_HEADER_LEN);
+	}
+}
+
+uint8_t *ioa_network_buffer_data_origin(ioa_network_buffer_handle nbh) {
+	stun_buffer_list_elem *buf_elem = (stun_buffer_list_elem *)nbh;
+	return buf_elem->buf.buf + buf_elem->buf.offset - buf_elem->buf.coffset;
+}
+
+size_t ioa_network_buffer_get_size_origin(ioa_network_buffer_handle nbh) {
 	if(!nbh)
 		return 0;
 	else {
