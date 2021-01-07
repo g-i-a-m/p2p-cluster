@@ -64,7 +64,7 @@ void StunProxyMgr::Startup() {
     local_proxy_port = Configure::GetInstance() ->GetProxyPort();
 
     spAmqpHandler= std::make_shared<amqp_asio>();
-    spAmqpHandler->InitAmqp(this,"admin:admin@192.168.10.109","奔波儿灞","灞波儿奔_");
+    spAmqpHandler->InitAmqp(this,Configure::GetInstance()->GetRabbitmq_url(),"奔波儿灞","灞波儿奔_");
     
     spProxyServer=std::make_shared<CStunProxy>(local_proxy_port, 1500);
     spProxyServer->SetListen(this);
