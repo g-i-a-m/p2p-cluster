@@ -9,3 +9,4 @@ coturn/bin
 coturn/build
 coturn/lib
 coturn/include
+test/node_modules/*
