@@ -24,6 +24,7 @@
     </p>
     <p>
         <span style="margin-left:40px">transport by turn</span><input type="checkbox" checked=true class="transport-policy"></input>
+        <span style="margin-left:40px">自动双向通话</span><input type="checkbox" checked=true class="auto-tonghua"></input>
     </p>
     <button class="btn-regist">regist</button>
     <p class="msg-info"></p>
@@ -153,7 +154,9 @@ class Chat {
     async answer (offer) {
         // open要在setRemote之前，不然不会触发对方的addstream事件
         // 自动双向通话
-        await this.openMyCamera();
+        if ($('.auto-tonghua').checked) {
+            await this.openMyCamera();
+        }
 
         $('.video-box').style.display = 'block';
         console.log('this.pc.setRemoteDescription:', offer);
