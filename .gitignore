@@ -10,3 +10,5 @@ coturn/build
 coturn/lib
 coturn/include
 test/node_modules/*
+test/auth/.DS_Store
+.DS_Store

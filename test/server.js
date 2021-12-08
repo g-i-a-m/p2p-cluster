@@ -11,8 +11,8 @@ for (let i = 0; i < MAX_USERS; i++) {
 
 const cfg = {
     port: 8010,
-    ssl_key: './auth/2817229__offcncloud.com.key',
-    ssl_cert: './auth/2817229__offcncloud.com.pem'
+    ssl_key: './auth/server.key',
+    ssl_cert: './auth/server.crt'
 };
 
 const processRequest = (req, res) => {

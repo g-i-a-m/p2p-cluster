@@ -209,7 +209,23 @@ class Chat {
         return navigator.mediaDevices.getUserMedia({audio: true, video: true})
             .then(mediaStream => {
             console.log('addTrack');
-            mediaStream.getTracks().forEach(track => this.pc.addTrack(track, mediaStream));
+            mediaStream.getTracks().forEach(track => {
+                if (track.kind == 'audio') {
+                    this.pc.addTransceiver(track, {
+                    direction: "sendrecv",
+                    streams: [mediaStream]});
+                } else if (track.kind == 'video') {
+                    this.pc.addTransceiver(track, {
+                        direction: "sendrecv",
+                        streams: [mediaStream],
+                        sendEncodings: [
+                        {rid: 'h'},
+                        {rid: 'm', scaleResolutionDownBy: 2.0},
+                        {rid: 'l', scaleResolutionDownBy: 4.0},
+                        ]
+                    });
+                }
+            });
             this.mediaStream = mediaStream;
             $('.my-video').srcObject = mediaStream;
         }); 
@@ -316,7 +332,7 @@ class Chat {
             currentChat.onRecvAnswer(offer);
         }
     }
-    var ws = new WebSocket("wss://node.offcncloud.com:8010");
+    var ws = new WebSocket("wss://hah.fcnb666.com:8010");
     ws.sendData = function (data) {
         ws.send(JSON.stringify(data));
     };
