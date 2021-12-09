@@ -193,35 +193,7 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
         case STUN_METHOD_REFRESH:
             spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;
-        case STUN_METHOD_CREATE_PERMISSION: {
-            stun_tid tid;
-            stun_tid_from_message_str(p_buffer,n_len,&tid);
-            std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
-            ioa_addr peer_addr;
-            GetStunAttrAddress(p_buffer,n_len,STUN_ATTRIBUTE_XOR_PEER_ADDRESS,&peer_addr);
-            requestinfo info;
-            info.srcip = srcip;
-            info.srcport = srcport;
-            info.peerip = peer_addr.s4.sin_addr.s_addr;
-            info.peerport = peer_addr.s4.sin_port;
-            mapRequests[key] = info;
-
-            // key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
-            // key.append(std::to_string(peer_addr.s4.sin_port));
-            // auto it = mapProxyInfo.find(key);
-            // if (it != mapProxyInfo.end()) {
-            //     if (it->second.proxyip!=local_proxy_ip) {
-            //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
-            //     }
-            //     else {
-            //         spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
-            //     }
-            // }
-            // else {
-            //     std::cout << "not found router ip" << method << std::endl;
-            // }
-            spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
-            break;}
+        case STUN_METHOD_CREATE_PERMISSION:
         case STUN_METHOD_CHANNEL_BIND: {
             stun_tid tid;
             stun_tid_from_message_str(p_buffer,n_len,&tid);
@@ -235,20 +207,6 @@ void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std:
             info.peerport = peer_addr.s4.sin_port;
             mapRequests[key] = info;
 
-            // key = stun_custom_header::ip2string(peer_addr.s4.sin_addr.s_addr);
-            // key.append(std::to_string(peer_addr.s4.sin_port));
-            // auto it = mapProxyInfo.find(key);
-            // if (it != mapProxyInfo.end()) {
-            //     if (it->second.proxyip!=local_proxy_ip) {
-            //         spProxyServer->SendToByAddr(it->second.proxyip,it->second.proxyport,(const char*)custom_packet_buffer,custom_packet_len);
-            //     }
-            //     else {
-            //         spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
-            //     }
-            // }
-            // else {
-            //     std::cout << "not found router ip" << method << std::endl;
-            // }
             spProxyServer->SendToByAddr(g_coturn_ip,g_coturn_port,(const char*)custom_packet_buffer,custom_packet_len);
             break;}
         default:
@@ -315,14 +273,10 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
         size_t n_payload_len = n_len-cus_header->GetLength();
         uint16_t method = stun_get_method_str(p_payload,n_payload_len);
         if (is_channel_msg_str(p_payload,n_payload_len)) {
-            //spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_payload+STUN_CHANNEL_HEADER_LENGTH,n_payload_len-STUN_CHANNEL_HEADER_LENGTH);
             spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
         }
         else if (stun_is_indication_str(p_payload,n_payload_len)) {
             if (method == STUN_METHOD_SEND) {
-                // uint8_t* buffer = GetStunAttrBufferData(p_payload,n_payload_len,STUN_ATTRIBUTE_DATA);
-                // size_t len = GetStunAttrBufferSize(buffer-4);
-                // spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)buffer,len);
                 spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
             }
             else if (method == STUN_METHOD_DATA) {

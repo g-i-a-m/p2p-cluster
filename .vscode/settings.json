@@ -75,6 +75,6 @@
     "C_Cpp.default.cppStandard": "c++17",
     "commentTranslate.targetLanguage": "zh-CN",
     "editor.find.autoFindInSelection": true,
-    "window.zoomLevel": -0.0001,
+    "window.zoomLevel": 1,
     "cmake.configureOnOpen": true
 }
