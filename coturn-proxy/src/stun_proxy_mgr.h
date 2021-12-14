@@ -57,10 +57,6 @@ protected:
 private:
     void HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std::shared_ptr<PacketBuffer> pPacket, size_t n_len);
     void HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std::shared_ptr<PacketBuffer> pPacket, size_t n_len);
-    void HandlePacketFromOtherProxy(uint32_t srcip, uint16_t srcport, std::shared_ptr<PacketBuffer> pPacket, size_t n_len);
-
-    void HandleBindRequest();
-    void HandleAllocateRequest();
 
     void HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_t len);
     void HandleErrorResponse(uint16_t method, uint8_t *buffer, size_t len);
@@ -76,7 +72,6 @@ private:
     std::string str_local_ip;
     uint32_t local_proxy_ip;
     uint16_t local_proxy_port;
-    std::unordered_map<std::string,proxyinfo> mapProxyInfo;
     std::unordered_map<std::string,proxyinfo> mapPeerInfo;
     std::map<std::string,requestinfo> mapRequests;
 };
