@@ -67,6 +67,37 @@ const util = {
             + date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
     }
 };
+function initFromCache() {
+    var url = localStorage.getItem('p2p_demo_cache_stunurl');
+    if (url !== null && url !== undefined && url !== '')
+        $('.coturn-url').value = url;
+    var user = localStorage.getItem('p2p_demo_cache_user');
+    if (user !== null && user !== undefined && user !== '')
+        $('.auth-user').value = user;
+    var pwd = localStorage.getItem('p2p_demo_cache_pwd');
+    if (pwd !== null && pwd !== undefined && pwd !== '')
+        $('.auth-password').value = pwd;
+}
+
+function saveToCache() {
+    var url = $('.coturn-url').value;
+    localStorage.setItem('p2p_demo_cache_stunurl',url);
+
+    var user = $('.auth-user').value;
+    localStorage.setItem('p2p_demo_cache_user',user);
+
+    var pwd = $('.auth-password').value;
+    localStorage.setItem('p2p_demo_cache_pwd',pwd);
+}
+
+function clearCache() {
+    localStorage.removeItem('p2p_demo_cache_stunurl');
+    localStorage.removeItem('p2p_demo_cache_user');
+    localStorage.removeItem('p2p_demo_cache_pwd');
+}
+
+window.onload = initFromCache();
+
 class Chat {
     constructor (ws, remoteUserId) {
         this.mediaStream = null;
@@ -80,12 +111,12 @@ class Chat {
     initConnect () {
         // STUN/TURN configure
         var configuration = {
-                                iceServers: [{
-                                    urls: $('.coturn-url').value,//"turn:192.168.10.151:9900",
-                                    username: $('.auth-user').value,//"ctf",
-                                    credential: $('.auth-password').value,//"ctf123"
-                                }],
-                                iceTransportPolicy: $('.transport-policy').checked?"relay":"all"
+            iceServers: [{
+                urls: $('.coturn-url').value,//"turn:192.168.10.151:9900",
+                username: $('.auth-user').value,//"ctf",
+                credential: $('.auth-password').value,//"ctf123"
+            }],
+            iceTransportPolicy: $('.transport-policy').checked?"relay":"all"
         };
         console.log('transport by turn:',$('.transport-policy').checked);
         this.pc = new window.RTCPeerConnection(configuration);
@@ -363,6 +394,9 @@ class Chat {
         if ($('.btn-regist').textContent === 'regist') {
             $('.room-id').disabled = true;
             $('.btn-regist').textContent = 'unregist';
+            //save cache when regist
+            saveToCache();
+
             ws.sendData({
                 type: 'regist',
                 data: {
@@ -373,6 +407,9 @@ class Chat {
         else {
             $('.room-id').disabled = false;
             $('.btn-regist').textContent = 'regist';
+            // clean cache
+            clearCache();
+
             ws.sendData({
                 type: 'unregist',
                 data: {
