@@ -27,7 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "ns_turn_server.h"
 
 #include "ns_turn_utils.h"
@@ -4362,6 +4363,26 @@ static int write_client_connection(turn_turnserver *server, ts_ur_super_session*
 	}
 }
 
+static int notify_release_relay_session(ts_ur_super_session* ss, allocation* allocation) {
+	uint16_t port = ntohs(allocation->relay_sessions->s->local_addr.s4.sin_port);
+    struct in_addr s;
+    s.s_addr = allocation->relay_sessions->s->local_addr.s4.sin_addr.s_addr;
+    char* szIP = inet_ntoa(s);
+	printf("@## allocation_timeout %s:%u\n",szIP,port);
+
+	turn_turnserver *server = (turn_turnserver*)ss->server;
+	ioa_network_buffer_handle nbh = ioa_network_buffer_allocate(server->e);
+	union stun_custom_header* packet = (union stun_custom_header*)ioa_network_buffer_data_origin(nbh);
+	packet->header.identifier 	= STUN_CUSTOM_RELEASE_IDENTIFIER;
+	// packet->header.srcIp 	= s->local_addr.s4.sin_addr.s_addr;
+	// packet->header.srcPort 	= s->local_addr.s4.sin_port;
+	packet->header.dstIp 		= allocation->relay_sessions->s->local_addr.s4.sin_addr.s_addr;
+	packet->header.dstPort 		= allocation->relay_sessions->s->local_addr.s4.sin_port;
+
+	int ret = write_client_connection(server, ss, nbh, TTL_IGNORE, TOS_IGNORE);
+	return ret;
+}
+
 static void client_ss_allocation_timeout_handler(ioa_engine_handle e, void *arg) {
 
 	UNUSED_ARG(e);
@@ -4380,7 +4401,7 @@ static void client_ss_allocation_timeout_handler(ioa_engine_handle e, void *arg)
 		return;
 
 	allocation* a =  get_allocation_ss(ss);
-
+	notify_release_relay_session(ss,a);
 	turn_turnserver* server = (turn_turnserver*) (ss->server);
 
 	if (!server) {

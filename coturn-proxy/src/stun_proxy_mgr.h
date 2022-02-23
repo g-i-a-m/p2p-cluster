@@ -11,7 +11,6 @@
 #include <string>
 #include <boost/shared_ptr.hpp>
 #include "stun_proxy.h"
-#include "amqp_asio.h"
 #include "systhread/Scheduler.h"
 #include "systhread/Worker.h"
 #include "systhread/ThreadPool.h"
@@ -37,10 +36,14 @@ struct proxyinfo {
     uint16_t proxyport;
 };
 
+struct AddrInfo {
+    uint32_t ip;
+    uint16_t port;
+};
+
 class amqp_asio;
 
 class StunProxyMgr : public CStunProxy::cListener, 
-                     public cAmqpListener,
                      public std::enable_shared_from_this<StunProxyMgr> {
 public:
     StunProxyMgr();
@@ -49,8 +52,6 @@ public:
     void PacketCallbackAsync(uint32_t srcip, uint16_t srcport, std::shared_ptr<PacketBuffer> pPacket, size_t n_len);
     void Startup();
     void Shutdown();
-    
-    virtual void onBroadcastMessageArrived(const std::string &msg) override;
 
 protected:
 
@@ -73,6 +74,8 @@ private:
     uint32_t local_proxy_ip;
     uint16_t local_proxy_port;
     std::unordered_map<std::string,proxyinfo> mapPeerInfo;
+    std::map<std::string,AddrInfo> mapAllocInfo;
+    std::map<std::string,AddrInfo> mapLocalRemote;
     std::map<std::string,requestinfo> mapRequests;
 };
 

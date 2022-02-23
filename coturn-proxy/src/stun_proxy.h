@@ -79,11 +79,6 @@ public:
     void Start();
 
 public:
-    //add host addr and host port
-    void AddProxyInfo(unsigned int local_ip,unsigned short local_port,unsigned int remote_ip,unsigned short remote_port);
-    void AddProxyInfoSync(unsigned int local_ip,unsigned short local_port,unsigned int remote_ip,unsigned short remote_port);
-    void CleanInvalidProxyInfo();
-    void CleanInvalidProxyInfoSync();
     void handle_signal(boost::system::error_code code, int signal);
     void SetListen(cListener *p_listen){ mp_Listen=p_listen;};
     int SendToByAddr(unsigned int  iSrcIp,unsigned short iSrcPort,const char* pBuffer,int nLen,bool async=true);

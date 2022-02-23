@@ -85,64 +85,14 @@ void CStunProxy::Start()
             }
             else
             {
-                std::string s_key=std::to_string(uSrcIP)+std::to_string(uSrcPort);
-                auto proxy_item=m_proxy_info.find(s_key);
-                if(proxy_item!=m_proxy_info.end()) {
-                    PacketFack& item=proxy_item->second;
-                    std::chrono::system_clock::duration dur = std::chrono::system_clock::now().time_since_epoch();
-                    std::chrono::seconds secs = std::chrono::duration_cast<std::chrono::seconds>(dur);
-                    item.timestamp = secs.count();
-                    SendToByAddr(item.remote_ip,item.remote_port,(char*)&buffer_[0],n);
-                }
-                else {
-                    std::shared_ptr<PacketBuffer> pPacket = std::make_shared<PacketBuffer>();
-                    pPacket->SetLength(n);
-                    memcpy(pPacket->GetData(),(char*)&buffer_[0],n);
-                    mp_Listen->PacketCallback(uSrcIP,uSrcPort,pPacket,n);
-                }
+                std::shared_ptr<PacketBuffer> pPacket = std::make_shared<PacketBuffer>();
+                pPacket->SetLength(n);
+                memcpy(pPacket->GetData(),(char*)&buffer_[0],n);
+                mp_Listen->PacketCallback(uSrcIP,uSrcPort,pPacket,n);
             }
         }
     });
     io_context.run();
-}
-
-void CStunProxy::AddProxyInfo(unsigned int local_ip,unsigned short local_port,unsigned int remote_ip,unsigned short remote_port)
-{
-    strand_->post(boost::bind(&CStunProxy::AddProxyInfoSync, this,local_ip,local_port,remote_ip,remote_port));
-}
-
-void CStunProxy::AddProxyInfoSync(unsigned int local_ip,unsigned short local_port,unsigned int remote_ip,unsigned short remote_port)
-{
-    PacketFack item;
-	item.local_ip=local_ip;
-	item.local_port=local_port;
-	item.remote_ip=remote_ip;
-	item.remote_port=remote_port;
-	std::string s_key;
-	s_key=std::to_string(item.local_ip);
-	s_key+=std::to_string(item.local_port);
-	m_proxy_info[s_key]=item;
-}
-
-void CStunProxy::CleanInvalidProxyInfo()
-{
-    strand_->post(boost::bind(&CStunProxy::CleanInvalidProxyInfoSync, this));
-}
-
-void CStunProxy::CleanInvalidProxyInfoSync()
-{
-    std::chrono::system_clock::duration dur = std::chrono::system_clock::now().time_since_epoch();
-    std::chrono::seconds secs = std::chrono::duration_cast<std::chrono::seconds>(dur);
-    uint64_t currTimestamp = secs.count();
-    for (auto it = m_proxy_info.begin(); it!=m_proxy_info.end(); )
-    {
-        if (currTimestamp > (it->second.timestamp+20))
-        {
-            m_proxy_info.erase(it++);
-            continue;
-        }
-        ++it;
-    }
 }
 
 void CStunProxy::handle_signal(boost::system::error_code code, int signal)

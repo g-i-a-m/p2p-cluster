@@ -59,9 +59,6 @@ void StunProxyMgr::Startup() {
     printf("Proxy ip address %s\n", str_local_ip.c_str());
     local_proxy_port = Configure::GetInstance() ->GetProxyPort();
 
-    spAmqpHandler= std::make_shared<amqp_asio>();
-    spAmqpHandler->InitAmqp(this,Configure::GetInstance()->GetRabbitmq_url(),"奔波儿灞","灞波儿奔_");
-    
     spProxyServer=std::make_shared<CStunProxy>(local_proxy_port, 1500);
     spProxyServer->SetListen(this);
     spProxyServer->Start();
@@ -69,13 +66,6 @@ void StunProxyMgr::Startup() {
 
 void StunProxyMgr::Shutdown() {
     // to be continue...
-}
-
-void StunProxyMgr::onBroadcastMessageArrived(const std::string &msg) {
-    std::cout << "rabbitmq recv msg: %s" << msg.c_str() << std::endl;
-    JsonParse json(msg);
-    std::string method;
-    json.GetStringValue(JSON_ACTION,method);
 }
 
 void StunProxyMgr::HandlePacketFromClient(uint32_t srcip, uint16_t srcport, std::shared_ptr<PacketBuffer> pPacket, size_t n_len) {
@@ -124,7 +114,17 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
     uint8_t* p_payload = p_buffer+cus_header->GetLength();
     size_t n_payload_len = n_len-cus_header->GetLength();
     uint16_t method = stun_get_method_str(p_payload,n_payload_len);
-    if (cus_header->IsStunExtensionHeader()) {
+    if (cus_header->IsStunExtensionRelayHeader()) {
+        if (is_channel_msg_str(p_payload,n_payload_len)) {
+            spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
+        } else if (stun_is_indication_str(p_payload,n_payload_len)) {
+            if (method == STUN_METHOD_SEND) {
+                spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
+            } else {
+                std::cout << "unsuport indication packet, method:" << method << std::endl;
+            }
+        }
+    } else if (cus_header->IsStunExtensionHeader()) {
         // send to client
         if (is_channel_msg_str(p_payload,n_payload_len)) {
             std::string key = cus_header->GetDstIp();
@@ -153,15 +153,18 @@ void StunProxyMgr::HandlePacketFromCoturn(uint32_t srcip, uint16_t srcport, std:
         } else {
             
         }
-    } else if (cus_header->IsStunExtensionRelayHeader()) {
-        if (is_channel_msg_str(p_payload,n_payload_len)) {
-            spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
-        } else if (stun_is_indication_str(p_payload,n_payload_len)) {
-            if (method == STUN_METHOD_SEND) {
-                spProxyServer->SendToByAddr(htonl(cus_header->GetDstIntIp()),cus_header->GetDstPort(),(const char*)p_buffer,n_len);
-            } else {
-                std::cout << "unsuport indication packet, method:" << method << std::endl;
+    } else if (cus_header->IsStunExtensionReleaseHeader()) {
+        std::string key = stun_custom_header::ip2string(ntohl(cus_header->GetDstIntIp()));
+        key.append(std::to_string(cus_header->GetDstPort()));
+        auto it = mapLocalRemote.find(key);
+        if (it != mapLocalRemote.end()) {
+            std::string key = stun_custom_header::ip2string(it->second.ip);
+            key.append(std::to_string(it->second.port));
+            auto itp = mapPeerInfo.find(key);
+            if (itp!=mapPeerInfo.end()) {
+                mapPeerInfo.erase(itp);
             }
+            mapLocalRemote.erase(it);
         }
     } else {
         std::cout << "recv illegal data from coturn, len:" << n_len << std::endl;
@@ -172,7 +175,19 @@ void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_
     stun_custom_header* cus_header = (stun_custom_header*)buffer;
     uint8_t* p_payload = buffer+cus_header->GetLength();
     size_t n_payload_len = len-cus_header->GetLength();
-    if (STUN_METHOD_CREATE_PERMISSION == method) {
+    if (STUN_METHOD_ALLOCATE == method) {
+        ioa_addr relay_addr,mapped_addr;
+        GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_RELAYED_ADDRESS,&relay_addr);
+        GetStunAttrAddress(p_payload,n_payload_len,STUN_ATTRIBUTE_XOR_MAPPED_ADDRESS,&mapped_addr);
+        
+        std::string key = stun_custom_header::ip2string(mapped_addr.s4.sin_addr.s_addr);
+        key.append(std::to_string(ntohs(mapped_addr.s4.sin_port)));
+        AddrInfo info{relay_addr.s4.sin_addr.s_addr,relay_addr.s4.sin_port};
+        if (mapAllocInfo.find(key)!=mapAllocInfo.end()) {
+            abort();
+        }
+        mapAllocInfo.insert(std::pair<string,AddrInfo>(key,info));
+    } else if (STUN_METHOD_CREATE_PERMISSION == method) {
         stun_tid tid;
         stun_tid_from_message_str(p_payload,n_payload_len,&tid);
         std::string key((char*)tid.tsx_id,STUN_TID_SIZE);
@@ -184,6 +199,18 @@ void StunProxyMgr::HandleSuccessResponse(uint16_t method, uint8_t *buffer, size_
             info.srcip = it->second.srcip;
             info.srcport = it->second.srcport;
             mapPeerInfo[s_key] = info;
+
+            std::string key = stun_custom_header::ip2string(it->second.srcip);
+            key.append(std::to_string(it->second.srcport));
+            auto ita = mapAllocInfo.find(key);
+            if (ita!=mapAllocInfo.end()) {
+                std::string key = stun_custom_header::ip2string(ita->second.ip);
+                key.append(std::to_string(ntohs(ita->second.port)));
+                AddrInfo info{it->second.peerip,it->second.peerport};//peer relay
+                mapLocalRemote.insert(std::pair<string,AddrInfo>(key,info));
+                mapAllocInfo.erase(ita);
+            }
+
             mapRequests.erase(it);
         }
     }

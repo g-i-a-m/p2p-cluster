@@ -18,6 +18,7 @@ using namespace std;
 
 #define STUN_CUSTOM_IDENTIFIER htons(0x8000)
 #define STUN_CUSTOM_DATA_IDENTIFIER htons(0x8001)
+#define STUN_CUSTOM_RELEASE_IDENTIFIER htons(0x8002)
 #define DEFAULT_VALUE 0U
 #define STUN_COSTOM_HEADER_LEN  14U
 
@@ -60,7 +61,12 @@ union stun_custom_header {
         else
             return false;
     }
-
+    bool IsStunExtensionReleaseHeader() {
+        if (header.identifier==STUN_CUSTOM_RELEASE_IDENTIFIER)
+            return true;
+        else
+            return false;
+    }
     std::string GetSrcIp() {
         string szip("");
         if (header.srcIp!=0) {

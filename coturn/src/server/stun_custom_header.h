@@ -6,6 +6,7 @@
 //const static uint16_t stun_custom_header_identifier(htonl(0x8000));
 #define STUN_CUSTOM_IDENTIFIER htons(0x8000)
 #define STUN_CUSTOM_DATA_IDENTIFIER htons(0x8001)
+#define STUN_CUSTOM_RELEASE_IDENTIFIER htons(0x8002)
 #define DEFAULT_VALUE 0U
 #define STUN_CUSTOM_HEADER_LEN  14U
 #pragma pack(8)
